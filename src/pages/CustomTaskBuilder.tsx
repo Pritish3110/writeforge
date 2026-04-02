@@ -13,6 +13,7 @@ import {
   type CustomTask,
   type CustomTaskCategory,
 } from "@/lib/customTasks";
+import TaskSharingPanel from "@/components/taskSharing/TaskSharingPanel";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -425,12 +426,15 @@ const CustomTaskBuilder = () => {
             Build your own writing drills, save templates, and assign them to the week.
           </p>
         </div>
-        <Button
-          onClick={openNewTask}
-          className="bg-neon-purple hover:bg-neon-purple/90 font-mono gap-2 shrink-0"
-        >
-          <Plus className="h-4 w-4" /> Create New Task
-        </Button>
+        <div className="flex flex-wrap gap-2 shrink-0">
+          <TaskSharingPanel tasks={tasks} setTasks={setTasks} />
+          <Button
+            onClick={openNewTask}
+            className="bg-neon-purple hover:bg-neon-purple/90 font-mono gap-2"
+          >
+            <Plus className="h-4 w-4" /> Create New Task
+          </Button>
+        </div>
       </div>
 
       {builderTask && (

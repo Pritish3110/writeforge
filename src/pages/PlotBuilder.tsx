@@ -1,4 +1,5 @@
-import { type DragEvent, type KeyboardEvent, useEffect, useMemo, useState } from "react";
+import { type DragEvent, type KeyboardEvent, type ReactNode, useEffect, useMemo, useState } from "react";
+import { AnimatePresence, motion } from "framer-motion";
 import { Link } from "react-router-dom";
 import { useIsMobile } from "@/hooks/use-mobile";
 import { useLocalStorage } from "@/hooks/useLocalStorage";
@@ -40,6 +41,7 @@ import { Slider } from "@/components/ui/slider";
 import { Textarea } from "@/components/ui/textarea";
 import { toast } from "@/components/ui/sonner";
 import {
+  ChevronDown,
   Flame,
   GitFork,
   GripVertical,
@@ -54,7 +56,7 @@ const previewClampClass =
   "overflow-hidden [display:-webkit-box] [-webkit-box-orient:vertical]";
 
 const panelSurfaceClass =
-  "rounded-2xl border border-border/70 bg-background/60 p-4 shadow-[0_18px_40px_hsl(var(--background)/0.35)] backdrop-blur-sm";
+  "rounded-2xl border border-border/70 bg-background/60 p-3.5 shadow-[0_16px_34px_hsl(var(--background)/0.28)] backdrop-blur-sm";
 
 const metadataBadgeClass =
   "border-border/60 bg-muted/30 font-mono text-[10px] uppercase tracking-[0.16em] text-muted-foreground";
@@ -73,6 +75,88 @@ const workflowSteps = [
     description: "Select a beat to refine stakes, characters, and foreshadowing in the context panel.",
   },
 ] as const;
+
+const phaseGuidance: Record<PlotPhase, string> = {
+  Promise:
+    "Frame the beat, anchor the story promise, and hint at the pressure that will grow from it.",
+  Progress:
+    "Push the beat forward, connect it to character choices, and intensify the pressure on the story.",
+  Payoff:
+    "Land the consequence, reveal the payoff, and make the emotional or plot turn feel earned.",
+};
+
+type EditorAccordionSection =
+  | "stakes"
+  | "characters"
+  | "scenes"
+  | "foreshadowing";
+
+type SidebarMode = "summary" | "draft";
+
+interface SidebarAccordionSectionProps {
+  title: string;
+  children: ReactNode;
+  isOpen: boolean;
+  onToggle: () => void;
+  description: string;
+  badge?: ReactNode;
+}
+
+const SidebarAccordionSection = ({
+  title,
+  children,
+  isOpen,
+  onToggle,
+  description,
+  badge,
+}: SidebarAccordionSectionProps) => (
+  <div
+    className={cn(
+      "rounded-xl border border-border/70 bg-background/40 transition-all duration-200",
+      isOpen &&
+        "border-neon-purple/45 bg-background/70 shadow-[0_0_0_1px_hsl(var(--neon-purple)/0.18),0_16px_34px_hsl(var(--neon-purple)/0.08)]",
+    )}
+  >
+    <button
+      type="button"
+      onClick={onToggle}
+      className="flex w-full items-center justify-between gap-3 px-4 py-3 text-left"
+    >
+      <div className="min-w-0">
+        <p className="font-mono text-[11px] uppercase tracking-[0.18em] text-muted-foreground">
+          {title}
+        </p>
+        <p className="mt-1 text-xs leading-relaxed text-muted-foreground">
+          {description}
+        </p>
+      </div>
+      <div className="flex shrink-0 items-center gap-2">
+        {badge}
+        <ChevronDown
+          className={cn(
+            "h-4 w-4 text-muted-foreground transition-transform duration-200",
+            isOpen && "rotate-180 text-neon-purple",
+          )}
+        />
+      </div>
+    </button>
+
+    <AnimatePresence initial={false}>
+      {isOpen ? (
+        <motion.div
+          key="content"
+          initial={{ opacity: 0, y: -5 }}
+          animate={{ opacity: 1, y: 0 }}
+          exit={{ opacity: 0, y: -5 }}
+          transition={{ duration: 0.2, ease: "easeOut" }}
+          className="origin-top border-t border-border/60 px-4 py-3"
+        >
+          {children}
+        </motion.div>
+      ) : null}
+    </AnimatePresence>
+  </div>
+);
 
 const getConflictTone = (value: number) => {
   if (value < 30) return "Low";
@@ -121,11 +205,10 @@ const PlotBuilder = () => {
   const [draggedPointId, setDraggedPointId] = useState<string | null>(null);
   const [dragOverPointId, setDragOverPointId] = useState<string | null>(null);
   const [dragOverPhase, setDragOverPhase] = useState<PlotPhase | null>(null);
+  const [mode, setMode] = useState<SidebarMode>("summary");
+  const [activeEditorSection, setActiveEditorSection] =
+    useState<EditorAccordionSection | null>(null);
   const shouldLoadSceneLinks = isCreating || Boolean(editingId);
-
-  useEffect(() => {
-    console.log("Plot Builder Mounted");
-  }, []);
 
   const plotPoints = useMemo(
     () => assignPhaseOrder(syncPlotPoints(storedPlotPoints)),
@@ -151,9 +234,11 @@ const PlotBuilder = () => {
 
   useEffect(() => {
     if (editingId && !pointMap.has(editingId)) {
+      setMode("summary");
       setEditingId(null);
       setIsCreating(false);
       setDraft(createEmptyPlotPointDraft());
+      setActiveEditorSection(null);
     }
   }, [editingId, pointMap]);
 
@@ -167,7 +252,6 @@ const PlotBuilder = () => {
       ) as Record<PlotPhase, PlotPoint[]>,
     [plotPoints],
   );
-
   const conflictByPhase = useMemo(
     () =>
       PLOT_PHASES.map((phase) => {
@@ -175,8 +259,7 @@ const PlotBuilder = () => {
         const average =
           points.length > 0
             ? Math.round(
-                points.reduce((total, point) => total + point.conflictLevel, 0) /
-                  points.length,
+                points.reduce((sum, point) => sum + point.conflictLevel, 0) / points.length,
               )
             : 0;
 
@@ -205,7 +288,6 @@ const PlotBuilder = () => {
       ),
     [plotPoints, pointMap],
   );
-
   const characterUsage = useMemo(
     () =>
       characters
@@ -215,7 +297,7 @@ const PlotBuilder = () => {
         }))
         .filter((character) => character.count > 0)
         .sort((left, right) => right.count - left.count || left.name.localeCompare(right.name))
-        .slice(0, 6),
+        .slice(0, 4),
     [characters, plotPoints],
   );
 
@@ -243,25 +325,31 @@ const PlotBuilder = () => {
     ids.includes(id) ? ids.filter((item) => item !== id) : [...ids, id];
 
   const openSummaryPanel = () => {
+    setMode("summary");
     setEditingId(null);
     setIsCreating(false);
     setDraft(createEmptyPlotPointDraft());
+    setActiveEditorSection(null);
     setIsContextDrawerOpen(true);
   };
 
   const clearContextSelection = () => {
+    setMode("summary");
     setEditingId(null);
     setIsCreating(false);
     setDraft(createEmptyPlotPointDraft());
+    setActiveEditorSection(null);
   };
 
   const startCreatePoint = (phase: PlotPhase = "Promise") => {
+    setMode("draft");
     setEditingId(null);
     setIsCreating(true);
     setDraft({
       ...createEmptyPlotPointDraft(),
       phase,
     });
+    setActiveEditorSection(null);
 
     if (isMobile) {
       setIsContextDrawerOpen(true);
@@ -269,9 +357,11 @@ const PlotBuilder = () => {
   };
 
   const openPointDetails = (point: PlotPoint) => {
+    setMode("draft");
     setEditingId(point.id);
     setIsCreating(false);
     setDraft(toDraft(point));
+    setActiveEditorSection(null);
 
     if (isMobile) {
       setIsContextDrawerOpen(true);
@@ -284,7 +374,10 @@ const PlotBuilder = () => {
       return;
     }
 
+    setMode("summary");
+    setIsCreating(false);
     setDraft(createEmptyPlotPointDraft());
+    setActiveEditorSection(null);
   };
 
   const savePlotPoint = () => {
@@ -342,6 +435,7 @@ const PlotBuilder = () => {
       description: `${title} is now part of your story board.`,
     });
 
+    setMode("draft");
     setEditingId(pointId);
     setIsCreating(false);
 
@@ -478,182 +572,190 @@ const PlotBuilder = () => {
     }
   };
 
-  const renderContextPanel = (mobile = false) => (
-    <div className={cn("space-y-4", mobile ? "pb-6" : "")}>
-      {contextMode === "summary" ? (
-        <>
-          <div className="space-y-3">
-            <div className="inline-flex items-center gap-2 rounded-full border border-neon-cyan/30 bg-neon-cyan/10 px-3 py-1 font-mono text-[11px] uppercase tracking-[0.18em] text-neon-cyan">
-              Story context
-            </div>
+  const toggleEditorSection = (section: EditorAccordionSection) => {
+    setActiveEditorSection((prev) => (prev === section ? null : section));
+  };
+
+  const renderSummaryPanel = (mobile = false) => (
+    <div className={cn("flex flex-col gap-3", mobile ? "pb-4" : "h-full justify-between")}>
+      <div className="space-y-3">
+        <div className={cn(panelSurfaceClass, "bg-muted/20")}>
+          <div className="inline-flex items-center gap-2 rounded-full border border-neon-cyan/30 bg-neon-cyan/10 px-3 py-1 font-mono text-[11px] uppercase tracking-[0.18em] text-neon-cyan">
+            Story Context
+          </div>
+          <div className="mt-3">
+            <h2 className="text-xl font-semibold tracking-tight">Build with intent</h2>
+            <p className="mt-1.5 text-sm leading-relaxed text-muted-foreground">
+              Start with a Promise beat, move pressure through Progress, and use Payoff to cash in on what the story set up.
+            </p>
+          </div>
+        </div>
+
+        <div className={panelSurfaceClass}>
+          <div className="flex items-center justify-between gap-3">
             <div>
-              <h2 className="text-2xl font-semibold tracking-tight">Build with intent</h2>
-              <p className="mt-2 text-sm leading-relaxed text-muted-foreground">
-                Start with a Promise beat, move pressure through Progress, and use Payoff to cash in on what the story set up.
+              <p className="font-mono text-[11px] uppercase tracking-[0.18em] text-neon-purple">
+                Conflict Distribution
+              </p>
+              <p className="mt-1 text-xs leading-relaxed text-muted-foreground">
+                See where the story pressure is clustering.
               </p>
             </div>
+            <Badge variant="outline" className={metadataBadgeClass}>
+              Avg {averageConflict}
+            </Badge>
           </div>
 
-          <div className={panelSurfaceClass}>
-            <div className="flex items-center justify-between gap-3">
-              <div>
-                <p className="font-mono text-[11px] uppercase tracking-[0.18em] text-neon-purple">
-                  Conflict distribution
-                </p>
-                <p className="mt-1 text-sm text-muted-foreground">
-                  See where the story pressure is clustering.
-                </p>
-              </div>
-              <Badge variant="outline" className={metadataBadgeClass}>
-                Avg {averageConflict}
-              </Badge>
-            </div>
-
-            <div className="mt-4 space-y-3">
-              {conflictByPhase.map((entry) => {
-                const phaseStyle = getPhaseStyle(entry.phase);
-                return (
-                  <div key={entry.phase} className="space-y-2">
-                    <div className="flex items-center justify-between gap-3">
-                      <div className="flex items-center gap-2">
-                        <span
-                          className="h-2.5 w-2.5 rounded-full"
-                          style={{ backgroundColor: phaseStyle.color }}
-                        />
-                        <p className="text-sm font-medium">{entry.phase}</p>
-                      </div>
-                      <span className="font-mono text-xs text-muted-foreground">
-                        {entry.average}/100
-                      </span>
+          <div className="mt-3 space-y-2.5">
+            {conflictByPhase.map((entry) => {
+              const phaseStyle = getPhaseStyle(entry.phase);
+              return (
+                <div key={entry.phase} className="space-y-1.5">
+                  <div className="flex items-center justify-between gap-3">
+                    <div className="flex items-center gap-2">
+                      <span
+                        className="h-2 w-2 rounded-full"
+                        style={{ backgroundColor: phaseStyle.color }}
+                      />
+                      <p className="text-sm font-medium">{entry.phase}</p>
                     </div>
-                    <div className="h-2 rounded-full bg-muted/60">
+                    <span className="font-mono text-[11px] text-muted-foreground">
+                      {entry.average}/100
+                    </span>
+                  </div>
+                  <div className="h-1.5 rounded-full bg-muted/60">
+                    <div
+                      className="h-full rounded-full"
+                      style={{
+                        width: `${entry.average}%`,
+                        backgroundColor: phaseStyle.color,
+                      }}
+                    />
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        </div>
+
+        <div className={panelSurfaceClass}>
+          <div className="flex items-center justify-between gap-3">
+            <div>
+              <p className="font-mono text-[11px] uppercase tracking-[0.18em] text-neon-cyan">
+                Character Usage
+              </p>
+              <p className="mt-1 text-xs leading-relaxed text-muted-foreground">
+                Track which arcs are actually present across the board.
+              </p>
+            </div>
+            <Users className="h-4 w-4 text-neon-cyan" />
+          </div>
+
+          {characterUsage.length > 0 ? (
+            <div className="mt-3 space-y-2.5">
+              {characterUsage.map((character) => {
+                const ratio =
+                  plotPoints.length > 0 ? (character.count / plotPoints.length) * 100 : 0;
+                return (
+                  <div key={character.id} className="space-y-1.5">
+                    <div className="flex items-center justify-between gap-3">
+                      <div className="min-w-0">
+                        <p className="truncate text-sm font-medium">{character.name}</p>
+                        <p className="text-xs text-muted-foreground">
+                          {character.type || "Character"}
+                        </p>
+                      </div>
+                      <Badge variant="outline" className={metadataBadgeClass}>
+                        {character.count} beat{character.count === 1 ? "" : "s"}
+                      </Badge>
+                    </div>
+                    <div className="h-1.5 rounded-full bg-muted/60">
                       <div
-                        className="h-full rounded-full"
-                        style={{
-                          width: `${entry.average}%`,
-                          backgroundColor: phaseStyle.color,
-                        }}
+                        className="h-full rounded-full bg-neon-cyan"
+                        style={{ width: `${ratio}%` }}
                       />
                     </div>
-                    <p className="text-xs text-muted-foreground">
-                      {entry.count} beat{entry.count === 1 ? "" : "s"} in {entry.phase}
-                    </p>
                   </div>
                 );
               })}
             </div>
-          </div>
-
-          <div className={panelSurfaceClass}>
-            <div className="flex items-center justify-between gap-3">
-              <div>
-                <p className="font-mono text-[11px] uppercase tracking-[0.18em] text-neon-cyan">
-                  Character usage
-                </p>
-                <p className="mt-1 text-sm text-muted-foreground">
-                  Track which arcs are actually present across the board.
-                </p>
-              </div>
-              <Users className="h-4 w-4 text-neon-cyan" />
-            </div>
-
-            {characterUsage.length > 0 ? (
-              <div className="mt-4 space-y-3">
-                {characterUsage.map((character) => {
-                  const ratio =
-                    plotPoints.length > 0 ? (character.count / plotPoints.length) * 100 : 0;
-                  return (
-                    <div key={character.id} className="space-y-2">
-                      <div className="flex items-center justify-between gap-3">
-                        <div>
-                          <p className="text-sm font-medium">{character.name}</p>
-                          <p className="text-xs text-muted-foreground">
-                            {character.type || "Character"}
-                          </p>
-                        </div>
-                        <Badge variant="outline" className={metadataBadgeClass}>
-                          {character.count} beat{character.count === 1 ? "" : "s"}
-                        </Badge>
-                      </div>
-                      <div className="h-2 rounded-full bg-muted/60">
-                        <div
-                          className="h-full rounded-full bg-neon-cyan"
-                          style={{ width: `${ratio}%` }}
-                        />
-                      </div>
-                    </div>
-                  );
-                })}
-              </div>
-            ) : (
-              <p className="mt-4 text-sm text-muted-foreground">
-                Attach characters to plot beats to see whose arc is carrying the story.
-              </p>
-            )}
-          </div>
-
-          <div className={panelSurfaceClass}>
-            <div className="flex items-center justify-between gap-3">
-              <div>
-                <p className="font-mono text-[11px] uppercase tracking-[0.18em] text-neon-pink">
-                  Foreshadowing overview
-                </p>
-                <p className="mt-1 text-sm text-muted-foreground">
-                  Make setups and payoffs visible before you draft scenes.
-                </p>
-              </div>
-              <GitFork className="h-4 w-4 text-neon-pink" />
-            </div>
-
-            <div className="mt-4 grid grid-cols-2 gap-3">
-              <div className="rounded-xl border border-border/60 bg-background/40 p-3">
-                <p className="font-mono text-xs text-muted-foreground">Total links</p>
-                <p className="mt-2 text-2xl font-semibold">{foreshadowLinks.length}</p>
-              </div>
-              <div className="rounded-xl border border-border/60 bg-background/40 p-3">
-                <p className="font-mono text-xs text-muted-foreground">Scene-linked beats</p>
-                <p className="mt-2 text-2xl font-semibold">{sceneLinkedPoints}</p>
-              </div>
-            </div>
-
-            <p className="mt-4 text-sm text-muted-foreground">
-              {beatsWithoutForeshadowing} beat{beatsWithoutForeshadowing === 1 ? "" : "s"} still
-              need stronger setup or payoff connections.
+          ) : (
+            <p className="mt-3 text-sm text-muted-foreground">
+              Attach characters to plot beats to see whose arc is carrying the story.
             </p>
+          )}
+        </div>
 
-            {foreshadowLinks.length > 0 && (
-              <div className="mt-4 space-y-2">
-                {foreshadowLinks.slice(0, 3).map(({ source, target }) => (
-                  <div
-                    key={`${source.id}-${target.id}`}
-                    className="rounded-xl border border-border/60 bg-background/40 p-3"
-                  >
-                    <p className="text-sm font-medium">{source.title}</p>
-                    <p className="mt-1 text-xs text-muted-foreground">
-                      pays off into {target.title} in {target.phase}
-                    </p>
-                  </div>
-                ))}
-              </div>
-            )}
+        <div className={panelSurfaceClass}>
+          <div className="flex items-center justify-between gap-3">
+            <div>
+              <p className="font-mono text-[11px] uppercase tracking-[0.18em] text-neon-pink">
+                Foreshadowing Overview
+              </p>
+              <p className="mt-1 text-xs leading-relaxed text-muted-foreground">
+                Keep setups and payoffs visible before you draft scenes.
+              </p>
+            </div>
+            <GitFork className="h-4 w-4 text-neon-pink" />
           </div>
 
-          <Button
-            onClick={() => {
-              startCreatePoint("Promise");
-              if (!mobile) return;
-            }}
-            className="w-full bg-neon-purple font-mono hover:bg-neon-purple/90"
-          >
-            <Plus className="mr-2 h-4 w-4" /> Create Promise Beat
-          </Button>
-        </>
-      ) : (
-        <>
+          <div className="mt-3 grid grid-cols-2 gap-2.5">
+            <div className="rounded-xl border border-border/60 bg-background/40 p-2.5">
+              <p className="font-mono text-[10px] uppercase tracking-[0.14em] text-muted-foreground">
+                Total Links
+              </p>
+              <p className="mt-1.5 text-xl font-semibold">{foreshadowLinks.length}</p>
+            </div>
+            <div className="rounded-xl border border-border/60 bg-background/40 p-2.5">
+              <p className="font-mono text-[10px] uppercase tracking-[0.14em] text-muted-foreground">
+                Scene-Linked
+              </p>
+              <p className="mt-1.5 text-xl font-semibold">{sceneLinkedPoints}</p>
+            </div>
+          </div>
+
+          <p className="mt-3 text-sm text-muted-foreground">
+            {beatsWithoutForeshadowing} beat{beatsWithoutForeshadowing === 1 ? "" : "s"} still
+            need stronger setup or payoff connections.
+          </p>
+
+          {foreshadowLinks.length > 0 && (
+            <div className="mt-3 space-y-2">
+              {foreshadowLinks.slice(0, 2).map(({ source, target }) => (
+                <div
+                  key={`${source.id}-${target.id}`}
+                  className="rounded-xl border border-border/60 bg-background/40 px-3 py-2.5"
+                >
+                  <p className="truncate text-sm font-medium">{source.title}</p>
+                  <p className="mt-1 text-xs text-muted-foreground">
+                    pays off into {target.title} in {target.phase}
+                  </p>
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
+      </div>
+
+      <div className={cn(panelSurfaceClass, "p-3")}>
+        <Button
+          onClick={() => startCreatePoint("Promise")}
+          className="w-full bg-neon-purple font-mono hover:bg-neon-purple/90"
+        >
+          <Plus className="mr-2 h-4 w-4" /> New Plot Point
+        </Button>
+      </div>
+    </div>
+  );
+
+  const renderDraftPanel = (mobile = false) => (
+    <div className={cn("flex flex-col gap-3", mobile ? "pb-4" : "h-full justify-between")}>
+      <div className="space-y-3">
+        <div className={cn(panelSurfaceClass, "p-3")}>
           <div className="flex items-start justify-between gap-3">
-            <div className="space-y-3">
+            <div className="min-w-0 space-y-2">
               <div
-                className="inline-flex items-center gap-2 rounded-full border px-3 py-1 font-mono text-[11px] uppercase tracking-[0.18em]"
+                className="inline-flex items-center gap-2 rounded-full border px-2.5 py-1 font-mono text-[10px] uppercase tracking-[0.18em]"
                 style={{
                   backgroundColor: selectedPhaseStyle.background,
                   borderColor: selectedPhaseStyle.border,
@@ -661,21 +763,20 @@ const PlotBuilder = () => {
                 }}
               >
                 <span
-                  className="h-2 w-2 rounded-full"
+                  className="h-1.5 w-1.5 rounded-full"
                   style={{ backgroundColor: selectedPhaseStyle.color }}
                 />
-                {contextMode === "create" ? `${draft.phase} draft` : activePoint?.phase}
+                {contextMode === "edit" ? activePoint?.phase : `${draft.phase} draft`}
               </div>
+
               <div>
-                <h2 className="text-2xl font-semibold tracking-tight">
-                  {contextMode === "create"
-                    ? "Create a new plot point"
-                    : activePoint?.title || "Edit plot point"}
-                </h2>
-                <p className="mt-2 text-sm leading-relaxed text-muted-foreground">
-                  {contextMode === "create"
-                    ? "Shape the beat, connect it to characters, and define the pressure it adds to the story."
-                    : "Refine the selected beat without losing sight of its stakes, links, and narrative role."}
+                <p className="font-mono text-[11px] uppercase tracking-[0.18em] text-muted-foreground">
+                  {contextMode === "edit" ? "Edit Plot Point" : "Create Plot Point"}
+                </p>
+                <p className="mt-1 text-sm leading-relaxed text-muted-foreground">
+                  {contextMode === "edit"
+                    ? "Refine the selected beat without losing sight of its stakes, links, and narrative role."
+                    : phaseGuidance[draft.phase] || phaseGuidance.Promise}
                 </p>
               </div>
             </div>
@@ -685,7 +786,7 @@ const PlotBuilder = () => {
                 <Button
                   variant="ghost"
                   size="icon"
-                  className="text-muted-foreground hover:text-destructive"
+                  className="h-8 w-8 text-muted-foreground hover:text-destructive"
                   onClick={() => deletePlotPoint(activePoint.id)}
                 >
                   <Trash2 className="h-4 w-4" />
@@ -693,7 +794,7 @@ const PlotBuilder = () => {
               )}
               <Button
                 variant="ghost"
-                className="font-mono text-xs"
+                className="h-8 px-2.5 font-mono text-[11px] uppercase tracking-[0.16em]"
                 onClick={() => {
                   clearContextSelection();
                   if (mobile) {
@@ -706,51 +807,41 @@ const PlotBuilder = () => {
             </div>
           </div>
 
-          <div className={panelSurfaceClass}>
-            <p className="font-mono text-[11px] uppercase tracking-[0.18em] text-neon-purple">
-              Beat details
-            </p>
-            <div className="mt-4 space-y-4">
-              <div className="space-y-2">
-                <Label className="font-mono text-xs">Title</Label>
-                <Input
-                  value={draft.title}
-                  onChange={(event) => updateDraft({ title: event.target.value })}
-                  placeholder="Ex: The promise of the cursed mark"
-                />
-              </div>
-
-              <div className="space-y-2">
-                <Label className="font-mono text-xs">Description</Label>
-                <Textarea
-                  value={draft.description}
-                  onChange={(event) => updateDraft({ description: event.target.value })}
-                  placeholder="What happens in this beat, and why does it matter?"
-                  className="min-h-[132px]"
-                />
-              </div>
-
-              <div className="space-y-2">
-                <Label className="font-mono text-xs">Stakes</Label>
-                <Textarea
-                  value={draft.stakes}
-                  onChange={(event) => updateDraft({ stakes: event.target.value })}
-                  placeholder="What breaks, shifts, or gets lost if this beat goes wrong?"
-                  className="min-h-[110px]"
-                />
-              </div>
+          <div className="mt-3 space-y-3">
+            <div className="space-y-2">
+              <Label className="font-mono text-[11px] uppercase tracking-[0.16em] text-muted-foreground">
+                Title
+              </Label>
+              <Input
+                value={draft.title}
+                onChange={(event) => updateDraft({ title: event.target.value })}
+                placeholder="Ex: The promise of the cursed mark"
+                className="h-10"
+              />
             </div>
-          </div>
 
-          <div className={panelSurfaceClass}>
-            <div className="grid gap-4 lg:grid-cols-2 xl:grid-cols-1 2xl:grid-cols-2">
+            <div className="space-y-2">
+              <Label className="font-mono text-[11px] uppercase tracking-[0.16em] text-muted-foreground">
+                Description
+              </Label>
+              <Textarea
+                value={draft.description}
+                onChange={(event) => updateDraft({ description: event.target.value })}
+                placeholder="What happens in this beat, and why does it matter?"
+                className="min-h-[96px]"
+              />
+            </div>
+
+            <div className="grid gap-3 border-t border-border/60 pt-3">
               <div className="space-y-2">
-                <Label className="font-mono text-xs">Phase</Label>
+                <Label className="font-mono text-[11px] uppercase tracking-[0.16em] text-muted-foreground">
+                  Phase
+                </Label>
                 <Select
                   value={draft.phase}
                   onValueChange={(value) => updateDraft({ phase: value as PlotPhase })}
                 >
-                  <SelectTrigger>
+                  <SelectTrigger className="h-10">
                     <SelectValue />
                   </SelectTrigger>
                   <SelectContent>
@@ -765,7 +856,9 @@ const PlotBuilder = () => {
 
               <div className="space-y-2">
                 <div className="flex items-center justify-between gap-3">
-                  <Label className="font-mono text-xs">Conflict pressure</Label>
+                  <Label className="font-mono text-[11px] uppercase tracking-[0.16em] text-muted-foreground">
+                    Conflict
+                  </Label>
                   <span className="font-mono text-xs text-muted-foreground">
                     {draft.conflictLevel} · {getConflictTone(draft.conflictLevel)}
                   </span>
@@ -782,68 +875,94 @@ const PlotBuilder = () => {
               </div>
             </div>
           </div>
+        </div>
 
-          <div className={panelSurfaceClass}>
-            <div className="flex items-center justify-between gap-3">
-              <div>
-                <p className="font-mono text-[11px] uppercase tracking-[0.18em] text-neon-cyan">
-                  Characters involved
-                </p>
-                <p className="mt-1 text-sm text-muted-foreground">
-                  Choose the characters whose arc this beat actively moves.
-                </p>
-              </div>
+        <div className="space-y-2.5">
+          <SidebarAccordionSection
+            title="Stakes"
+            isOpen={activeEditorSection === "stakes"}
+            onToggle={() => toggleEditorSection("stakes")}
+            description="Clarify what breaks, shifts, or gets lost if this beat fails."
+            badge={
+              <Badge variant="outline" className={metadataBadgeClass}>
+                {draft.stakes.trim() ? "Ready" : "Empty"}
+              </Badge>
+            }
+          >
+            <div className="space-y-2">
+              <Label className="font-mono text-[11px] uppercase tracking-[0.16em] text-muted-foreground">
+                Stakes
+              </Label>
+              <Textarea
+                value={draft.stakes}
+                onChange={(event) => updateDraft({ stakes: event.target.value })}
+                placeholder="What breaks, shifts, or gets lost if this beat goes wrong?"
+                className="min-h-[96px]"
+              />
+            </div>
+          </SidebarAccordionSection>
+
+          <SidebarAccordionSection
+            title="Characters"
+            isOpen={activeEditorSection === "characters"}
+            onToggle={() => toggleEditorSection("characters")}
+            description="Choose the characters whose arc this beat actively moves."
+            badge={
               <Badge variant="outline" className={metadataBadgeClass}>
                 {draft.characterIds.length} linked
               </Badge>
+            }
+          >
+            <div className="space-y-2">
+              {characters.length > 0 ? (
+                characters.map((character) => (
+                  <label
+                    key={character.id}
+                    className="flex items-start gap-3 rounded-lg border border-border/60 bg-background/35 px-3 py-2.5"
+                  >
+                    <Checkbox
+                      checked={draft.characterIds.includes(character.id)}
+                      onCheckedChange={() =>
+                        updateDraft({
+                          characterIds: toggleId(draft.characterIds, character.id),
+                        })
+                      }
+                    />
+                    <div className="space-y-0.5">
+                      <p className="text-sm font-medium">{character.name}</p>
+                      <p className="text-xs text-muted-foreground">
+                        {character.type || "Character Type Unset"}
+                      </p>
+                    </div>
+                  </label>
+                ))
+              ) : (
+                <div className="rounded-lg border border-dashed border-border/70 bg-background/35 px-3 py-3">
+                  <p className="text-sm text-muted-foreground">
+                    No characters available yet. Add them in Character Lab first.
+                  </p>
+                </div>
+              )}
             </div>
+          </SidebarAccordionSection>
 
-            <div className="mt-4 max-h-60 space-y-2 overflow-auto pr-1">
-              {characters.map((character) => (
-                <label
-                  key={character.id}
-                  className="flex items-start gap-3 rounded-xl border border-border/60 bg-background/40 p-3"
-                >
-                  <Checkbox
-                    checked={draft.characterIds.includes(character.id)}
-                    onCheckedChange={() =>
-                      updateDraft({
-                        characterIds: toggleId(draft.characterIds, character.id),
-                      })
-                    }
-                  />
-                  <div className="space-y-1">
-                    <p className="text-sm font-medium">{character.name}</p>
-                    <p className="text-xs text-muted-foreground">
-                      {character.type || "Character Type Unset"}
-                    </p>
-                  </div>
-                </label>
-              ))}
-            </div>
-          </div>
-
-          <div className={panelSurfaceClass}>
-            <div className="flex items-start justify-between gap-3">
-              <div>
-                <p className="font-mono text-[11px] uppercase tracking-[0.18em] text-neon-pink">
-                  Scene links
-                </p>
-                <p className="mt-1 text-sm text-muted-foreground">
-                  Tie this beat to actual scene drafts so planning stays grounded in pages.
-                </p>
-              </div>
+          <SidebarAccordionSection
+            title="Scene Links"
+            isOpen={activeEditorSection === "scenes"}
+            onToggle={() => toggleEditorSection("scenes")}
+            description="Tie this beat to scene drafts so planning stays connected to pages."
+            badge={
               <Badge variant="outline" className={metadataBadgeClass}>
                 {draft.sceneIds.length} linked
               </Badge>
-            </div>
-
+            }
+          >
             {scenes.length > 0 ? (
-              <div className="mt-4 max-h-60 space-y-2 overflow-auto pr-1">
+              <div className="space-y-2">
                 {scenes.map((scene) => (
                   <label
                     key={scene.id}
-                    className="flex items-start gap-3 rounded-xl border border-border/60 bg-background/40 p-3"
+                    className="flex items-start gap-3 rounded-lg border border-border/60 bg-background/35 px-3 py-2.5"
                   >
                     <Checkbox
                       checked={draft.sceneIds.includes(scene.id)}
@@ -853,11 +972,17 @@ const PlotBuilder = () => {
                         })
                       }
                     />
-                    <div className="space-y-1">
+                    <div className="space-y-0.5">
                       <p className="text-xs font-mono text-muted-foreground">
                         {scene.savedAt || "Untitled Scene"} · {scene.wordCount} words
                       </p>
-                      <p className={cn("text-sm text-muted-foreground", previewClampClass, "[-webkit-line-clamp:2]")}>
+                      <p
+                        className={cn(
+                          "text-sm text-muted-foreground",
+                          previewClampClass,
+                          "[-webkit-line-clamp:2]",
+                        )}
+                      >
                         {scene.text || "No preview available."}
                       </p>
                     </div>
@@ -865,7 +990,7 @@ const PlotBuilder = () => {
                 ))}
               </div>
             ) : (
-              <div className="mt-4 rounded-xl border border-dashed border-border/70 bg-background/40 p-4">
+              <div className="rounded-lg border border-dashed border-border/70 bg-background/35 px-3 py-3">
                 <p className="text-sm text-muted-foreground">
                   No saved scenes yet. Save a draft in Scene Practice to connect it here.
                 </p>
@@ -874,31 +999,27 @@ const PlotBuilder = () => {
                 </Button>
               </div>
             )}
-          </div>
+          </SidebarAccordionSection>
 
-          <div className={panelSurfaceClass}>
-            <div className="flex items-center justify-between gap-3">
-              <div>
-                <p className="font-mono text-[11px] uppercase tracking-[0.18em] text-neon-purple">
-                  Foreshadowing links
-                </p>
-                <p className="mt-1 text-sm text-muted-foreground">
-                  Connect this beat to the setups or payoffs it belongs with.
-                </p>
-              </div>
+          <SidebarAccordionSection
+            title="Foreshadowing"
+            isOpen={activeEditorSection === "foreshadowing"}
+            onToggle={() => toggleEditorSection("foreshadowing")}
+            description="Connect this beat to the setups or payoffs it belongs with."
+            badge={
               <Badge variant="outline" className={metadataBadgeClass}>
                 {draft.foreshadowingIds.length} linked
               </Badge>
-            </div>
-
+            }
+          >
             {plotPoints.filter((point) => point.id !== editingId).length > 0 ? (
-              <div className="mt-4 max-h-60 space-y-2 overflow-auto pr-1">
+              <div className="space-y-2">
                 {plotPoints
                   .filter((point) => point.id !== editingId)
                   .map((point) => (
                     <label
                       key={point.id}
-                      className="flex items-start gap-3 rounded-xl border border-border/60 bg-background/40 p-3"
+                      className="flex items-start gap-3 rounded-lg border border-border/60 bg-background/35 px-3 py-2.5"
                     >
                       <Checkbox
                         checked={draft.foreshadowingIds.includes(point.id)}
@@ -908,14 +1029,20 @@ const PlotBuilder = () => {
                           })
                         }
                       />
-                      <div className="space-y-1">
+                      <div className="space-y-0.5">
                         <div className="flex flex-wrap items-center gap-2">
                           <p className="text-sm font-medium">{point.title}</p>
                           <Badge variant="outline" className={metadataBadgeClass}>
                             {point.phase}
                           </Badge>
                         </div>
-                        <p className={cn("text-sm text-muted-foreground", previewClampClass, "[-webkit-line-clamp:2]")}>
+                        <p
+                          className={cn(
+                            "text-sm text-muted-foreground",
+                            previewClampClass,
+                            "[-webkit-line-clamp:2]",
+                          )}
+                        >
                           {point.description}
                         </p>
                       </div>
@@ -923,29 +1050,34 @@ const PlotBuilder = () => {
                   ))}
               </div>
             ) : (
-              <div className="mt-4 rounded-xl border border-dashed border-border/70 bg-background/40 p-4">
+              <div className="rounded-lg border border-dashed border-border/70 bg-background/35 px-3 py-3">
                 <p className="text-sm text-muted-foreground">
                   Add more plot points to start weaving foreshadowing across the board.
                 </p>
               </div>
             )}
-          </div>
+          </SidebarAccordionSection>
+        </div>
+      </div>
 
-          <div className="flex flex-wrap items-center justify-end gap-2 border-t border-border/70 pt-4">
-            <Button variant="ghost" className="font-mono" onClick={resetDraftChanges}>
-              Reset
-            </Button>
-            <Button
-              className="bg-neon-purple font-mono hover:bg-neon-purple/90"
-              onClick={savePlotPoint}
-            >
-              {contextMode === "create" ? "Add Plot Point" : "Save Changes"}
-            </Button>
-          </div>
-        </>
-      )}
+      <div className={cn(panelSurfaceClass, "p-3")}>
+        <div className="flex items-center justify-between gap-2">
+          <Button variant="ghost" className="font-mono" onClick={resetDraftChanges}>
+            Reset
+          </Button>
+          <Button
+            className="bg-neon-purple font-mono hover:bg-neon-purple/90"
+            onClick={savePlotPoint}
+          >
+            {contextMode === "edit" ? "Save Changes" : "Add Plot Point"}
+          </Button>
+        </div>
+      </div>
     </div>
   );
+
+  const renderSidebarPanel = (mobile = false) =>
+    mode === "summary" ? renderSummaryPanel(mobile) : renderDraftPanel(mobile);
 
   return (
     <>
@@ -1240,24 +1372,8 @@ const PlotBuilder = () => {
           </div>
 
           {!isMobile && (
-            <aside className="w-80 flex-shrink-0 overflow-auto border-l border-border/70 bg-background/35 p-4">
-              <div className="space-y-4">
-                <div className="rounded-2xl border border-border/70 bg-card/80 p-4 shadow-[0_18px_42px_hsl(var(--background)/0.28)]">
-                  <p className="font-mono text-[11px] uppercase tracking-[0.18em] text-muted-foreground">
-                    {contextMode === "summary"
-                      ? "Context Panel"
-                      : contextMode === "create"
-                        ? "Create Plot Point"
-                        : "Plot Point Details"}
-                  </p>
-                  <p className="mt-2 text-sm text-muted-foreground">
-                    {contextMode === "summary"
-                      ? "Review the story shape or select a beat to edit its details."
-                      : "Refine the selected beat without leaving the board."}
-                  </p>
-                </div>
-                {renderContextPanel()}
-              </div>
+            <aside className="h-[calc(100vh-3rem)] w-80 flex-shrink-0 border-l border-border/70 bg-background/35 p-4">
+              {renderSidebarPanel()}
             </aside>
           )}
         </div>
@@ -1267,21 +1383,15 @@ const PlotBuilder = () => {
         <Drawer open={isContextDrawerOpen} onOpenChange={setIsContextDrawerOpen}>
           <DrawerContent className="border-border/70 bg-background/95">
             <DrawerHeader className="border-b border-border/70">
-              <DrawerTitle>
-                {contextMode === "summary"
-                  ? "Story Context"
-                  : contextMode === "create"
-                    ? "Create Plot Point"
-                    : "Plot Point Details"}
-              </DrawerTitle>
+              <DrawerTitle>{mode === "summary" ? "Story Context" : "Plot Editor"}</DrawerTitle>
               <DrawerDescription>
-                {contextMode === "summary"
-                  ? "Use this space to review the story shape before you add or edit beats."
-                  : "Edit this beat in context without losing the board."}
+                {mode === "summary"
+                  ? "Review story pressure, character usage, and foreshadowing before shaping the next beat."
+                  : "Shape the active beat with a compact editor and focused accordion sections."}
               </DrawerDescription>
             </DrawerHeader>
-            <div className="max-h-[78vh] overflow-y-auto px-4 py-4">
-              {renderContextPanel(true)}
+            <div className="px-4 py-4">
+              {renderSidebarPanel(true)}
             </div>
           </DrawerContent>
         </Drawer>
