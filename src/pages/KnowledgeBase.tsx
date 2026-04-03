@@ -61,14 +61,22 @@ const DEFAULT_SECTIONS: KBSection[] = [
 
 const STORAGE_KEY = "writeforge-knowledge-base";
 
-const KnowledgeBase = () => {
-  const [sections, setSections] = useState<KBSection[]>(() => {
+const readStoredSections = (): KBSection[] => {
+  try {
     const saved = localStorage.getItem(STORAGE_KEY);
-    return saved ? JSON.parse(saved) : DEFAULT_SECTIONS;
-  });
+    const parsed = saved ? JSON.parse(saved) : DEFAULT_SECTIONS;
+    return Array.isArray(parsed) ? parsed : DEFAULT_SECTIONS;
+  } catch {
+    return DEFAULT_SECTIONS;
+  }
+};
+
+const KnowledgeBase = () => {
+  const [sections, setSections] = useState<KBSection[]>(() => readStoredSections());
   const [editingId, setEditingId] = useState<string | null>(null);
   const [editTitle, setEditTitle] = useState("");
   const [editItems, setEditItems] = useState("");
+  const [openSections, setOpenSections] = useState<string[]>([]);
 
   useEffect(() => {
     localStorage.setItem(STORAGE_KEY, JSON.stringify(sections));
@@ -78,6 +86,7 @@ const KnowledgeBase = () => {
     setEditingId(section.id);
     setEditTitle(section.title);
     setEditItems(section.items.join("\n"));
+    setOpenSections((prev) => (prev.includes(section.id) ? prev : [...prev, section.id]));
   };
 
   const saveEdit = () => {
@@ -105,6 +114,7 @@ const KnowledgeBase = () => {
   const deleteSection = (id: string) => {
     setSections((prev) => prev.filter((s) => s.id !== id));
     if (editingId === id) setEditingId(null);
+    setOpenSections((prev) => prev.filter((sectionId) => sectionId !== id));
   };
 
   return (
@@ -116,7 +126,7 @@ const KnowledgeBase = () => {
         </p>
       </div>
 
-      <Accordion type="multiple" defaultValue={sections.map((s) => s.id)} className="space-y-3">
+      <Accordion type="multiple" value={openSections} onValueChange={setOpenSections} className="space-y-3">
         {sections.map((section) => {
           const isEditing = editingId === section.id;
           return (

@@ -492,7 +492,7 @@ Define for each:
       id: "fri-2",
       title: "Dialogue Scene",
       category: "Dialogue",
-      prompt: `Write a dialogue scene where two characters want the same thing but cannot both have it.
+      prompt: `Write a dialogue scene where two characters want the same thing but both cannot have it.
 
 Constraints:
 
