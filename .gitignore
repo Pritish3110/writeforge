@@ -22,3 +22,21 @@ dist-ssr
 *.njsproj
 *.sln
 *.sw?
+
+# dependencies
+node_modules/
+
+# python
+.venv/
+__pycache__/
+*.pyc
+
+# build
+dist/
+build/
+
+# env
+.env
+
+# system
+.DS_Store
