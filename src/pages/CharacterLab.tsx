@@ -15,6 +15,7 @@ type CharacterViewFilter = "All" | CharacterType;
 type ProfileSectionKey = "core" | "identity" | "traits" | "theme" | "contradictions";
 
 interface PersonalityTrait {
+  id: string;
   title: string;
   description: string;
 }
@@ -53,9 +54,10 @@ interface Character {
 const CHARACTER_TYPES: CharacterType[] = ["Main Character", "Side Character", "Activity Character"];
 const CHARACTER_FILTERS: CharacterViewFilter[] = ["All", ...CHARACTER_TYPES];
 
-const emptyTrait = (): PersonalityTrait => ({
-  title: "",
-  description: "",
+const emptyTrait = (trait: Partial<PersonalityTrait> = {}): PersonalityTrait => ({
+  id: trait.id ?? crypto.randomUUID(),
+  title: trait.title ?? "",
+  description: trait.description ?? "",
 });
 
 const emptyContradiction = (): Contradiction => ({
@@ -109,26 +111,26 @@ const buildKaelCharacter = (): Character => ({
   moral_problem: "Is it justified to become something monstrous in order to survive?",
   worthy_cause: "reject this world and rewrite my destiny, I will live and survive for the sole purpose of mocking this world and proving that I alone am enough. I will live without a single regret, a walking mirror showing this world exactly how ugly it really is.",
   personality_traits: [
-    {
+    emptyTrait({
       title: "Audacity",
       description: "Kael operates with a reckless, manic energy because he has already survived the \"worst-case scenario.\" To him, the boy who could feel fear died in that burning house; what remains is a ghost that cannot be threatened. He does whatever he wants while laughing. He is already alone, already hated, and already \"gone\"—so he treats life like a game where the rules no longer apply to him.",
-    },
-    {
+    }),
+    emptyTrait({
       title: "The \"No-Touch\" Mania",
       description: "Born from years of beatings and the betrayal of the girl he loved, Kael has developed a pathological revulsion to human contact. He moves with a frantic, liquid grace, avoiding the reach of others as if it were a lethal infection. He masks this deep-seated fear of abuse by avoiding the touch of others. He keeps the world at arm's length to ensure no human hand can ever hurt him again.",
-    },
-    {
+    }),
+    emptyTrait({
       title: "The Sovereign’s Court",
       description: "Kael has abandoned the \"meat-vehicles\" (humans) for the only companions that never lie: inanimate objects. He talks to his shoes, his clothes, and his daggers with an intimate, witty intensity. To him, they are the only things in life that will stay with him until the end, unaffected by his curse and incapable of betrayal. They are his council, his friends, and the only audience that matters in his private, mad theater.",
-    },
-    {
+    }),
+    emptyTrait({
       title: "The Spiteful Strategist",
       description: "Kael uses his lack of fear to bend the world to his will. He is audacious, witty, and utterly petty toward those who cross him. He carries grudges like holy relics, taking a spiteful joy in dismantling his enemies. Because nothing holds him back, he will destroy anything that attempts to tether or restrain him. He chooses to do it all while laughing, because the only other alternative is to die screaming—and he’s already done enough of that.",
-    },
-    {
+    }),
+    emptyTrait({
       title: "The Divine Cynic",
       description: "After watching his world burn under the silent gaze of the Sun, Kael has discarded every shred of divinity. He doesn't just disbelieve; he is actively hostile toward the concept of the Sun God. To Kael, the Sun is not a father or a protector—it is a celestial eye that watched his abuse and did nothing. He views worshippers as pathetic idiots, priests as predatory con artists, and the entire religion as a grand lie designed to give small-minded people a reason to hate what they don't understand.",
-    },
+    }),
   ],
   theme: {
     lie_based: "I am poison. Anyone close to me will suffer—so I’ll survive alone, no matter what this world decides.",
@@ -198,13 +200,14 @@ const toBoolean = (value: unknown): boolean => value === true;
 const isCharacterType = (value: unknown): value is CharacterType =>
   typeof value === "string" && CHARACTER_TYPES.includes(value as CharacterType);
 
-const normalizeTrait = (value: unknown): PersonalityTrait => {
+const normalizeTrait = (value: unknown, fallbackIndex: number): PersonalityTrait => {
   const record = value && typeof value === "object" ? (value as Record<string, unknown>) : {};
 
-  return {
+  return emptyTrait({
+    id: toText(record.id) || `legacy-trait-${fallbackIndex}`,
     title: toText(record.title),
     description: toText(record.description),
-  };
+  });
 };
 
 const normalizeContradiction = (value: unknown): Contradiction => {
@@ -240,7 +243,7 @@ const normalizeCharacter = (value: unknown, fallbackOrder: number): Character =>
     moral_problem: toText(record.moral_problem),
     worthy_cause: toText(record.worthy_cause),
     personality_traits: Array.isArray(record.personality_traits)
-      ? record.personality_traits.map(normalizeTrait)
+      ? record.personality_traits.map((trait, index) => normalizeTrait(trait, index))
       : [],
     theme: {
       lie_based: toText(themeRecord.lie_based),
@@ -353,7 +356,7 @@ const CharacterLab = () => {
   const [searchTerm, setSearchTerm] = useState("");
   const [draggedCharacterId, setDraggedCharacterId] = useState<string | null>(null);
   const [dragOverCharacterId, setDragOverCharacterId] = useState<string | null>(null);
-  const [removingTraitIndex, setRemovingTraitIndex] = useState<number | null>(null);
+  const [removingTraitId, setRemovingTraitId] = useState<string | null>(null);
   const [removingContradictionIndex, setRemovingContradictionIndex] = useState<number | null>(null);
 
   const characters = syncCharacters(storedCharacters, false);
@@ -411,13 +414,11 @@ const CharacterLab = () => {
     );
   };
 
-  const updateTrait = (index: number, field: keyof PersonalityTrait, value: string) => {
+  const updateTrait = (id: string, field: Exclude<keyof PersonalityTrait, "id">, value: string) => {
     setEditing((prev) => {
       if (!prev) return prev;
 
-      const nextTraits = prev.personality_traits.map((trait, traitIndex) =>
-        traitIndex === index ? { ...trait, [field]: value } : trait
-      );
+      const nextTraits = prev.personality_traits.map((trait) => (trait.id === id ? { ...trait, [field]: value } : trait));
 
       return { ...prev, personality_traits: nextTraits };
     });
@@ -446,19 +447,19 @@ const CharacterLab = () => {
     );
   };
 
-  const removeTrait = (index: number) => {
-    setRemovingTraitIndex(index);
+  const removeTrait = (id: string) => {
+    setRemovingTraitId(id);
 
     window.setTimeout(() => {
       setEditing((prev) =>
         prev
           ? {
               ...prev,
-              personality_traits: prev.personality_traits.filter((_, traitIndex) => traitIndex !== index),
+              personality_traits: prev.personality_traits.filter((trait) => trait.id !== id),
             }
           : prev
       );
-      setRemovingTraitIndex(null);
+      setRemovingTraitId(null);
     }, 180);
   };
 
@@ -512,7 +513,7 @@ const CharacterLab = () => {
     setEditing(null);
     setShowForm(false);
     setAdditionalOpen(true);
-    setRemovingTraitIndex(null);
+    setRemovingTraitId(null);
     setRemovingContradictionIndex(null);
   };
 
@@ -579,7 +580,7 @@ const CharacterLab = () => {
     setEditing(emptyChar());
     setShowForm(true);
     setAdditionalOpen(true);
-    setRemovingTraitIndex(null);
+    setRemovingTraitId(null);
     setRemovingContradictionIndex(null);
   };
 
@@ -587,7 +588,7 @@ const CharacterLab = () => {
     setEditing(cloneCharacter(character));
     setShowForm(true);
     setAdditionalOpen(true);
-    setRemovingTraitIndex(null);
+    setRemovingTraitId(null);
     setRemovingContradictionIndex(null);
   };
 
@@ -595,7 +596,7 @@ const CharacterLab = () => {
     setEditing(null);
     setShowForm(false);
     setAdditionalOpen(true);
-    setRemovingTraitIndex(null);
+    setRemovingTraitId(null);
     setRemovingContradictionIndex(null);
   };
 
@@ -763,25 +764,25 @@ const CharacterLab = () => {
                     <div className="space-y-3">
                       {editing.personality_traits.map((trait, index) => (
                         <div
-                          key={`${index}-${trait.title}-${trait.description}`}
+                          key={trait.id}
                           className={cn(
                             "rounded-lg border border-border bg-muted/20 p-3 space-y-3 animate-in fade-in-0 zoom-in-95 duration-200",
-                            removingTraitIndex === index && "animate-out fade-out-0 zoom-out-95 duration-200 pointer-events-none opacity-50"
+                            removingTraitId === trait.id && "animate-out fade-out-0 zoom-out-95 duration-200 pointer-events-none opacity-50"
                           )}
                         >
                           <div className="flex items-center justify-between gap-2">
                             <p className="font-mono text-xs uppercase tracking-wider text-muted-foreground">Trait {index + 1}</p>
-                            <Button variant="ghost" size="icon" className="h-7 w-7 text-destructive" onClick={() => removeTrait(index)}>
+                            <Button variant="ghost" size="icon" className="h-7 w-7 text-destructive" onClick={() => removeTrait(trait.id)}>
                               <X className="h-3.5 w-3.5" />
                             </Button>
                           </div>
                           <div>
                             <Label className="font-mono text-xs">Trait Title</Label>
-                            <Input value={trait.title} onChange={(e) => updateTrait(index, "title", e.target.value)} className="mt-1" />
+                            <Input value={trait.title} onChange={(e) => updateTrait(trait.id, "title", e.target.value)} className="mt-1" />
                           </div>
                           <div>
                             <Label className="font-mono text-xs">Description</Label>
-                            <Textarea value={trait.description} onChange={(e) => updateTrait(index, "description", e.target.value)} className="mt-1 min-h-[100px]" />
+                            <Textarea value={trait.description} onChange={(e) => updateTrait(trait.id, "description", e.target.value)} className="mt-1 min-h-[100px]" />
                           </div>
                         </div>
                       ))}
@@ -1112,7 +1113,7 @@ const CharacterLab = () => {
                 {viewingCharacter.personality_traits.length > 0 ? (
                   <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
                     {viewingCharacter.personality_traits.map((trait, index) => (
-                      <div key={`${viewingCharacter.id}-trait-${index}`} className="rounded-lg border border-border/70 bg-background/30 p-4 space-y-2">
+                      <div key={`${viewingCharacter.id}-trait-${trait.id}`} className="rounded-lg border border-border/70 bg-background/30 p-4 space-y-2">
                         <p className="font-mono text-xs uppercase tracking-[0.18em] text-neon-cyan">{trait.title || `Trait ${index + 1}`}</p>
                         <p className="text-sm leading-7 whitespace-pre-wrap text-foreground">{trait.description || "No description yet."}</p>
                       </div>
