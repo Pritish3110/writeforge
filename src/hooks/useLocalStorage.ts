@@ -13,7 +13,9 @@ export function useLocalStorage<T>(key: string, initialValue: T): [T, (value: T 
   useEffect(() => {
     try {
       localStorage.setItem(key, JSON.stringify(stored));
-    } catch {}
+    } catch {
+      // Ignore storage write failures, such as private mode quotas.
+    }
   }, [key, stored]);
 
   return [stored, setStored];

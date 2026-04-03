@@ -779,9 +779,406 @@ export const getDayName = (date: Date = new Date()): string => {
   return DAYS[date.getDay() === 0 ? 6 : date.getDay() - 1];
 };
 
+export type PromptTone = "dark" | "emotional" | "action" | "mystery";
+export type StoryPhase = "Promise" | "Progress" | "Payoff";
+
+export interface PromptTemplate {
+  id: string;
+  template: string;
+  tags: string[];
+}
+
+export const PROMPT_TONES: PromptTone[] = ["dark", "emotional", "action", "mystery"];
+export const STORY_PHASES: StoryPhase[] = ["Promise", "Progress", "Payoff"];
+
+export const PROMPT_LIBRARY: Record<PromptTone, PromptTemplate[]> = {
+  dark: [
+    {
+      id: "dark_001",
+      template:
+        "{character} arrives at {location} during the {phase} phase and realizes {conflict}. They must decide whether to {choice} before {stakes}. Let the scene steep in {emotion}, and show how {innerPressure}.",
+      tags: ["dark", "psychological", "decision"],
+    },
+    {
+      id: "dark_002",
+      template:
+        "{character} thought {location} would be safe, but {twist}. Frame the scene as a {phase} beat where {conflict} cannot be ignored any longer. Make every line feel heavier because {traitHint}.",
+      tags: ["dark", "dread", "revelation"],
+    },
+    {
+      id: "dark_003",
+      template:
+        "Set the scene in {location}. During the {phase} phase, {character} is forced into a private conversation about {conflict}. They can either {choice} or let {stakes} happen. Keep the emotional current rooted in {emotion}.",
+      tags: ["dark", "dialogue", "pressure"],
+    },
+    {
+      id: "dark_004",
+      template:
+        "{character} notices something wrong at {location} during the {phase} phase, and the wrongness links back to {conflict}. Build the scene around one irreversible choice: {choice}. By the end, it should feel clear that {stakes}, especially because {innerPressure}.",
+      tags: ["dark", "atmosphere", "irreversible-choice"],
+    },
+    {
+      id: "dark_005",
+      template:
+        "{character} returns to {location} and finds proof of {conflict}. Treat this as a {phase} scene with {emotion} under every action. The scene should turn when {twist}, forcing them to {choice}.",
+      tags: ["dark", "return", "twist"],
+    },
+    {
+      id: "dark_006",
+      template:
+        "Write a low-light, close-focus scene at {location}. During the {phase} phase, {character} must hide their reaction to {conflict} while deciding whether to {choice}. Let the dread sharpen because {traitHint}.",
+      tags: ["dark", "close-focus", "masking"],
+    },
+    {
+      id: "dark_007",
+      template:
+        "{character} is offered exactly what they thought they wanted at {location}, but the price is {conflict}. Place the scene in the {phase} phase and make the choice immediate: {choice}, or {stakes}. The mood should be heavy with {emotion}.",
+      tags: ["dark", "temptation", "cost"],
+    },
+    {
+      id: "dark_008",
+      template:
+        "During the {phase} phase, {character} witnesses {twist} at {location}. That moment makes {conflict} impossible to deny. Show them weighing whether to {choice} while {innerPressure}.",
+      tags: ["dark", "witness", "moral-pressure"],
+    },
+  ],
+  emotional: [
+    {
+      id: "emotional_001",
+      template:
+        "{character} meets someone important at {location} during the {phase} phase, and the reunion is shaped by {conflict}. They must decide whether to {choice} before {stakes}. Let the scene center on {emotion}, with {traitHint}.",
+      tags: ["emotional", "reunion", "choice"],
+    },
+    {
+      id: "emotional_002",
+      template:
+        "Set the scene in {location}. During the {phase} phase, {character} tries to say what matters, but {twist}. Keep the heart of the scene focused on {conflict}, and show how {innerPressure}.",
+      tags: ["emotional", "confession", "heart"],
+    },
+    {
+      id: "emotional_003",
+      template:
+        "{character} is given a quiet moment at {location} during the {phase} phase, but the quiet only sharpens {conflict}. Build the scene around whether they will {choice}. The emotional texture should feel like {emotion}.",
+      tags: ["emotional", "quiet-scene", "internal"],
+    },
+    {
+      id: "emotional_004",
+      template:
+        "Write a scene where {character} must offer comfort at {location}, even though {conflict} is still unresolved. Treat it as a {phase} beat where {stakes}. Let the tenderness hurt because {traitHint}.",
+      tags: ["emotional", "comfort", "bittersweet"],
+    },
+    {
+      id: "emotional_005",
+      template:
+        "{character} finds a small object at {location} that brings back {conflict}. During the {phase} phase, they must choose whether to {choice}. The scene should carry {emotion}, and the turn should come when {twist}.",
+      tags: ["emotional", "memory", "object"],
+    },
+    {
+      id: "emotional_006",
+      template:
+        "At {location}, {character} realizes someone else has been carrying {conflict} in silence. Frame this as a {phase} scene that asks them to {choice} before {stakes}. Keep the emotional rhythm intimate and layered with {emotion}.",
+      tags: ["emotional", "realization", "intimate"],
+    },
+    {
+      id: "emotional_007",
+      template:
+        "{character} arrives late to {location} during the {phase} phase and discovers {twist}. The scene should force them to confront {conflict} and decide whether to {choice}. Make their restraint or openness matter because {innerPressure}.",
+      tags: ["emotional", "lateness", "restraint"],
+    },
+    {
+      id: "emotional_008",
+      template:
+        "Write an emotionally precise scene at {location}. During the {phase} phase, {character} has one chance to respond to {conflict}. Let the main movement of the scene be their choice to {choice}, while {traitHint}.",
+      tags: ["emotional", "precision", "response"],
+    },
+  ],
+  action: [
+    {
+      id: "action_001",
+      template:
+        "{character} hits {location} during the {phase} phase just as {conflict} turns physical. They must {choice} before {stakes}. Keep the scene fast, tactile, and charged with {emotion}, while {traitHint}.",
+      tags: ["action", "momentum", "physical"],
+    },
+    {
+      id: "action_002",
+      template:
+        "Write a high-pressure scene in {location}. During the {phase} phase, {character} realizes {twist} and has seconds to respond. Force them to choose whether to {choice}, because {stakes}.",
+      tags: ["action", "high-pressure", "seconds"],
+    },
+    {
+      id: "action_003",
+      template:
+        "{character} is already moving when the scene opens at {location}. Treat it as a {phase} beat where {conflict} changes the plan mid-motion. Show the split-second choice to {choice}, and let {innerPressure} complicate every move.",
+      tags: ["action", "opening-motion", "plan-change"],
+    },
+    {
+      id: "action_004",
+      template:
+        "At {location}, {character} is forced into a fight, chase, or escape because of {conflict}. Frame the scene around the {phase} phase of the story and make the turning point their decision to {choice}. The urgency should feel like {emotion}.",
+      tags: ["action", "escape", "turning-point"],
+    },
+    {
+      id: "action_005",
+      template:
+        "{character} enters {location} with a clear objective, but {twist}. During the {phase} phase, they must improvise around {conflict} and decide whether to {choice} before {stakes}.",
+      tags: ["action", "objective", "improvise"],
+    },
+    {
+      id: "action_006",
+      template:
+        "Write a scene where the body leads the emotion. In {location}, during the {phase} phase, {character} has to react to {conflict} immediately. Build the whole scene around the cost of choosing to {choice}.",
+      tags: ["action", "body-first", "cost"],
+    },
+    {
+      id: "action_007",
+      template:
+        "{character} thought the danger at {location} was external, but {twist}. Use the {phase} phase to escalate {conflict} and force a visible choice: {choice}. Keep the energy sharp because {traitHint}.",
+      tags: ["action", "escalation", "visible-choice"],
+    },
+    {
+      id: "action_008",
+      template:
+        "Set the scene in {location}. During the {phase} phase, {character} must protect someone, retrieve something, or break through an obstacle while {conflict}. The scene should pivot on whether they will {choice} before {stakes}.",
+      tags: ["action", "mission", "obstacle"],
+    },
+  ],
+  mystery: [
+    {
+      id: "mystery_001",
+      template:
+        "{character} reaches {location} during the {phase} phase and discovers {conflict}. Treat the scene as a clue-heavy beat where they must decide whether to {choice} before {stakes}. Let the tension stay rooted in {emotion}.",
+      tags: ["mystery", "clue", "discovery"],
+    },
+    {
+      id: "mystery_002",
+      template:
+        "Write a scene at {location} where {character} realizes {twist}. During the {phase} phase, they must test whether {conflict} is real or staged. Their next move is to {choice}, and that choice should reshape the investigation.",
+      tags: ["mystery", "realization", "investigation"],
+    },
+    {
+      id: "mystery_003",
+      template:
+        "{character} questions someone at {location} during the {phase} phase, but the real pressure comes from {conflict}. Let the scene revolve around the choice to {choice}, with every answer deepening {emotion}.",
+      tags: ["mystery", "interrogation", "subtext"],
+    },
+    {
+      id: "mystery_004",
+      template:
+        "At {location}, {character} finds evidence that points in two opposite directions. Place the scene in the {phase} phase and make {conflict} the thing they cannot explain away. The turn comes when {twist}.",
+      tags: ["mystery", "evidence", "double-meaning"],
+    },
+    {
+      id: "mystery_005",
+      template:
+        "{character} enters {location} looking for one answer and instead uncovers {conflict}. During the {phase} phase, they must decide whether to {choice} before {stakes}. Let {traitHint} complicate what they notice first.",
+      tags: ["mystery", "search", "observation"],
+    },
+    {
+      id: "mystery_006",
+      template:
+        "Write a scene where {location} itself feels like a clue. During the {phase} phase, {character} starts to suspect {conflict}. The scene should tighten when {twist}, forcing them to {choice}.",
+      tags: ["mystery", "setting-clue", "suspect"],
+    },
+    {
+      id: "mystery_007",
+      template:
+        "{character} notices one detail at {location} that nobody else treats as important. Treat it as a {phase} beat where {conflict} might explain everything. The next decision is whether to {choice}, even though {stakes}.",
+      tags: ["mystery", "detail", "pattern"],
+    },
+    {
+      id: "mystery_008",
+      template:
+        "During the {phase} phase, {character} returns to {location} to verify a suspicion and finds {twist}. Build the scene around their attempt to make sense of {conflict}, with {innerPressure} shaping how they read the room.",
+      tags: ["mystery", "return", "suspicion"],
+    },
+  ],
+};
+
+export const PROMPT_CONFLICTS: Record<PromptTone, string[]> = {
+  dark: [
+    "a truth they cannot accept",
+    "a hidden betrayal that has been festering for years",
+    "the first clear sign of corruption inside themselves",
+    "proof that the safest person in the room is part of the harm",
+    "the possibility that their worst instinct was right all along",
+    "evidence that mercy may cost more than cruelty",
+  ],
+  emotional: [
+    "an apology that arrives too late",
+    "the fear that love and resentment can exist at the same time",
+    "a promise neither person knows how to keep anymore",
+    "the pain of being seen too clearly",
+    "the moment they understand what the other person needed from them",
+    "the choice between protecting someone and telling them the truth",
+  ],
+  action: [
+    "an ambush timed to their weakest moment",
+    "a plan collapsing under live pressure",
+    "an enemy who understands exactly how they fight",
+    "a narrow window before reinforcements arrive",
+    "a rescue turning into a trap",
+    "the realization that speed alone will not save anyone",
+  ],
+  mystery: [
+    "a clue that should not exist",
+    "a contradiction in the official story",
+    "a witness account that only makes the case stranger",
+    "evidence planted to look too obvious",
+    "a pattern linking two events that should be unrelated",
+    "the possibility that the wrong person has been protected on purpose",
+  ],
+};
+
+export const PROMPT_LOCATIONS: Record<PromptTone, string[]> = {
+  dark: [
+    "a shuttered church with ash in the aisles",
+    "an abandoned greenhouse overrun with black vines",
+    "a family dining room after midnight",
+    "a rain-soaked alley behind a theater",
+    "a ruined observatory where the lenses still turn",
+    "a silent infirmary lit by one failing lamp",
+  ],
+  emotional: [
+    "a train platform just before dawn",
+    "the kitchen of a house that no longer feels like home",
+    "a hospital rooftop in cold morning light",
+    "a half-empty wedding hall after the guests leave",
+    "a riverside bench where they used to meet",
+    "a small bookstore during closing time",
+  ],
+  action: [
+    "a collapsing bridge above floodwater",
+    "a crowded market breaking into panic",
+    "a freight yard full of moving trains",
+    "a stairwell with alarms blaring",
+    "a rooftop line above a neon district",
+    "a mountain pass choked with smoke",
+  ],
+  mystery: [
+    "an archive room with one file missing",
+    "a locked apartment that smells recently occupied",
+    "a museum wing closed to the public",
+    "a harbor warehouse with fresh footprints in old dust",
+    "a village square after everyone has gone indoors",
+    "a library map room where one drawer is warm",
+  ],
+};
+
+export const PROMPT_EMOTIONS: Record<PromptTone, string[]> = {
+  dark: ["slow dread", "hollow disgust", "quiet panic", "moral nausea", "cold grief", "suppressed terror"],
+  emotional: ["tender grief", "aching relief", "muted hope", "protective love", "raw vulnerability", "bittersweet longing"],
+  action: ["ferocious urgency", "controlled panic", "adrenaline-laced focus", "barely contained fury", "reckless resolve", "protective desperation"],
+  mystery: ["uneasy curiosity", "measured suspicion", "paranoid focus", "eerie fascination", "cautious dread", "quiet obsession"],
+};
+
+export const PROMPT_STAKES: Record<PromptTone, string[]> = {
+  dark: [
+    "someone innocent will carry the blame before dawn",
+    "the damage will become impossible to hide",
+    "the last safe relationship in their life will rot from the inside",
+    "they will become the thing they fear most",
+    "the truth will only surface after someone is already broken",
+    "the room will keep teaching them the wrong lesson",
+  ],
+  emotional: [
+    "the relationship they still care about will close for good",
+    "the chance to repair the bond may never return",
+    "someone will walk away believing the wrong thing",
+    "their silence will wound more deeply than honesty",
+    "the distance between them will harden into something permanent",
+    "they will miss the one moment that could soften the hurt",
+  ],
+  action: [
+    "the person they came to protect will be lost in the chaos",
+    "the route out will vanish in seconds",
+    "their team will fracture at the worst possible moment",
+    "the enemy will seize the objective first",
+    "the damage will spread beyond this fight",
+    "their only advantage will disappear",
+  ],
+  mystery: [
+    "the only witness will disappear before sunrise",
+    "the real culprit will have time to erase the trail",
+    "the wrong suspect will be punished next",
+    "the truth will bury itself under a cleaner lie",
+    "the pattern will strike again before anyone believes them",
+    "the clue they found will be meaningless by morning",
+  ],
+};
+
+export const PROMPT_TWISTS: Record<PromptTone, string[]> = {
+  dark: [
+    "the danger has already been invited in by someone they trust",
+    "the evidence points back to something they did themselves",
+    "the person asking for help knows more than they admit",
+    "the room has been staged to provoke the worst version of them",
+    "what looks like protection is really control",
+    "the thing they feared was true, just not in the way they expected",
+  ],
+  emotional: [
+    "the other person has been trying to protect them all along",
+    "the memory they were holding onto is incomplete",
+    "the gesture they dismissed was the apology",
+    "both people have been making the same mistake from different wounds",
+    "the goodbye they prepared for turns into a plea to stay",
+    "the kindness in the scene costs someone more than it first appears",
+  ],
+  action: [
+    "their ally is cut off from the plan",
+    "the objective is not where it was supposed to be",
+    "the person chasing them is trying to warn them",
+    "the escape path is the trap",
+    "the fight stops being about winning and starts being about choosing who to save",
+    "their best move exposes a second threat",
+  ],
+  mystery: [
+    "the clue was planted by someone who wanted exactly this conclusion",
+    "the witness recognizes them before they speak",
+    "the answer to one question opens a more dangerous one",
+    "the missing piece has been in plain sight all along",
+    "the person helping the investigation is shaping it from the shadows",
+    "the timeline only works if someone lied about being present",
+  ],
+};
+
+export const PROMPT_CHOICES: Record<PromptTone, string[]> = {
+  dark: [
+    "protect the lie that kept them alive",
+    "force the truth into the open before they are ready",
+    "burn the evidence and keep moving",
+    "stay and face the person they fear most",
+    "save someone who may not deserve it",
+    "let the worst assumption stand if it buys one more hour",
+  ],
+  emotional: [
+    "say the one honest thing they have been avoiding",
+    "offer comfort before asking for forgiveness",
+    "leave before the moment asks more of them",
+    "admit what they needed all along",
+    "choose tenderness over self-protection",
+    "tell the truth even if it ruins the version of the past they both survived on",
+  ],
+  action: [
+    "risk a direct assault instead of the safer escape",
+    "double back for the person who was left behind",
+    "break formation and trust instinct",
+    "sacrifice the clean plan for the messy rescue",
+    "hold the line long enough for someone else to get through",
+    "turn the enemy's momentum against them before time runs out",
+  ],
+  mystery: [
+    "follow the clue nobody else believes",
+    "confront the witness before the evidence is complete",
+    "keep the discovery secret for one more scene",
+    "test the wrong theory on purpose to see who reacts",
+    "return to the scene and risk being seen",
+    "share the clue with exactly one unreliable ally",
+  ],
+};
+
 export const WRITING_PROMPTS = [
   "Write about a door that should never be opened.",
-  "A character discovers a letter they wrote but don't remember writing.",
+  "A character discovers a letter they wrote but do not remember writing.",
   "Two strangers share an umbrella during a storm. Neither speaks the other's language.",
   "Write a scene set entirely in an elevator between floors.",
   "A character returns to their childhood home to find someone else living their life.",
@@ -790,7 +1187,7 @@ export const WRITING_PROMPTS = [
   "A character wakes up with someone else's scars.",
   "Write about a promise that took twenty years to keep.",
   "Two rivals are forced to work together to survive the night.",
-  "A character finds a journal that predicts tomorrow's events — but always slightly wrong.",
+  "A character finds a journal that predicts tomorrow's events, but it is always slightly wrong.",
   "Write about a feast where every dish tells a story.",
 ];
 

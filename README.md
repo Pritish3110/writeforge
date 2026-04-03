@@ -204,7 +204,11 @@ type Character = {
 
 ### Scene Practice
 
-- Generates prompts from `WRITING_PROMPTS` in `src/data/tasks.ts`.
+- Uses a smart prompt engine with tone, character, and story-phase filters.
+- Pulls character options from Character Lab storage when available.
+- Generates combinator-based prompts from `src/data/promptEngine.ts` by mixing templates, conflicts, locations, and twists.
+- Avoids repeating the same full prompt until the history resets after 100 generated combinations.
+- Auto-generates an editable scene title from prompt building blocks when the title field is empty.
 - Tracks live word count.
 - Saves drafts locally with timestamp and word count.
 - Exports the current writing session as:
@@ -303,6 +307,7 @@ retroflow-writer/
 │   ├── contexts/
 │   │   └── ThemeContext.tsx
 │   ├── data/
+│   │   ├── promptEngine.ts
 │   │   └── tasks.ts
 │   ├── hooks/
 │   │   ├── useLocalStorage.ts
@@ -354,10 +359,14 @@ retroflow-writer/
 
 ### Data and Logic
 
+- `src/data/promptEngine.ts`
+  - combinator-based prompt templates and smart scene prompt generation
+  - tone/phase configuration
+  - prompt reuse guard and Character Lab prompt normalization
 - `src/data/tasks.ts`
   - central daily task definitions
   - day list
-  - writing prompts
+  - fallback writing prompts
   - future wiki metadata on selected tasks
 - `src/hooks/useLocalStorage.ts`
   - generic localStorage hook
