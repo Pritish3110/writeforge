@@ -19,6 +19,7 @@ import {
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { toast } from "@/components/ui/sonner";
+import { useDeleteConfirmation } from "@/components/DeleteConfirmationProvider";
 import {
   CopyPlus,
   Download,
@@ -246,6 +247,7 @@ const buildTextExport = (sharedTasks) => {
 };
 
 const TaskSharingPanel = ({ tasks, setTasks }) => {
+  const confirmDelete = useDeleteConfirmation();
   const [open, setOpen] = useState(false);
   const [isExportModalOpen, setIsExportModalOpen] = useState(false);
   const [isImportModalOpen, setIsImportModalOpen] = useState(false);
@@ -474,7 +476,17 @@ const TaskSharingPanel = ({ tasks, setTasks }) => {
     }
   };
 
-  const handleDeleteTemplate = (templateId) => {
+  const handleDeleteTemplate = async (templateId) => {
+    const target = templates.find((template) => template.id === templateId);
+    if (!target) return;
+
+    const shouldDelete = await confirmDelete({
+      title: `Delete "${target.name || "this template"}"?`,
+      description: "This shared template will be removed from local storage and can no longer be reused from the sharing panel.",
+      confirmLabel: "Delete Template",
+    });
+    if (!shouldDelete) return;
+
     try {
       const nextTemplates = readStoredTemplates().filter(
         (template) => template.id !== templateId,

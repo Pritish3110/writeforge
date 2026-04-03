@@ -5,6 +5,7 @@ import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from "@/
 import { Pencil, Check, Plus, Trash2 } from "lucide-react";
 import { Textarea } from "@/components/ui/textarea";
 import { Input } from "@/components/ui/input";
+import { useDeleteConfirmation } from "@/components/DeleteConfirmationProvider";
 
 interface KBSection {
   id: string;
@@ -72,6 +73,7 @@ const readStoredSections = (): KBSection[] => {
 };
 
 const KnowledgeBase = () => {
+  const confirmDelete = useDeleteConfirmation();
   const [sections, setSections] = useState<KBSection[]>(() => readStoredSections());
   const [editingId, setEditingId] = useState<string | null>(null);
   const [editTitle, setEditTitle] = useState("");
@@ -111,7 +113,17 @@ const KnowledgeBase = () => {
     startEdit(newSection);
   };
 
-  const deleteSection = (id: string) => {
+  const deleteSection = async (id: string) => {
+    const target = sections.find((section) => section.id === id);
+    if (!target) return;
+
+    const shouldDelete = await confirmDelete({
+      title: `Delete "${target.title}"?`,
+      description: "This knowledge-base section and all of its notes will be removed. This action cannot be undone.",
+      confirmLabel: "Delete Section",
+    });
+    if (!shouldDelete) return;
+
     setSections((prev) => prev.filter((s) => s.id !== id));
     if (editingId === id) setEditingId(null);
     setOpenSections((prev) => prev.filter((sectionId) => sectionId !== id));
@@ -147,7 +159,7 @@ const KnowledgeBase = () => {
                           <Pencil className="h-3.5 w-3.5" />
                         </Button>
                       )}
-                      <Button variant="ghost" size="icon" className="h-7 w-7 text-muted-foreground hover:text-destructive" onClick={() => deleteSection(section.id)}>
+                      <Button variant="ghost" size="icon" className="h-7 w-7 text-muted-foreground hover:text-destructive" onClick={() => void deleteSection(section.id)}>
                         <Trash2 className="h-3.5 w-3.5" />
                       </Button>
                     </div>

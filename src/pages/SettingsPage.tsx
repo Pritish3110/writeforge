@@ -5,18 +5,23 @@ import { Switch } from "@/components/ui/switch";
 import { Button } from "@/components/ui/button";
 import { Label } from "@/components/ui/label";
 import { AlertTriangle, Moon, Sun, Database } from "lucide-react";
-import { useState } from "react";
+import { useDeleteConfirmation } from "@/components/DeleteConfirmationProvider";
 
 const SettingsPage = () => {
   const { theme, toggleTheme } = useTheme();
   const { resetAll } = useTaskTracking();
-  const [confirmReset, setConfirmReset] = useState(false);
+  const confirmDelete = useDeleteConfirmation();
 
-  const handleReset = () => {
-    if (!confirmReset) {
-      setConfirmReset(true);
-      return;
-    }
+  const handleReset = async () => {
+    const shouldReset = await confirmDelete({
+      title: "Reset all progress?",
+      description: "This will delete your tasks, characters, relationships, plot points, and saved drafts from local storage. This action cannot be undone.",
+      confirmLabel: "Reset Everything",
+      badgeLabel: "Destructive Action",
+    });
+
+    if (!shouldReset) return;
+
     resetAll();
     localStorage.removeItem("writeforge-characters");
     localStorage.removeItem("writeforge-kael-seeded");
@@ -25,7 +30,6 @@ const SettingsPage = () => {
     localStorage.removeItem("writeforge-custom-tasks");
     localStorage.removeItem("writeforge-plot-builder");
     localStorage.removeItem("writeforge-drafts");
-    setConfirmReset(false);
   };
 
   return (
@@ -66,16 +70,14 @@ const SettingsPage = () => {
           </div>
           <div className="border-t border-border pt-4">
             <Button
-              variant={confirmReset ? "destructive" : "outline"}
-              onClick={handleReset}
+              variant="outline"
+              onClick={() => void handleReset()}
               className="font-mono gap-2"
             >
               <AlertTriangle className="h-4 w-4" />
-              {confirmReset ? "Click again to confirm reset" : "Reset All Progress"}
+              Reset All Progress
             </Button>
-            {confirmReset && (
-              <p className="text-xs text-destructive mt-2">This will delete all tasks, characters, and drafts. This cannot be undone.</p>
-            )}
+            <p className="text-xs text-destructive mt-2">This will delete all tasks, characters, and drafts. This cannot be undone.</p>
           </div>
         </CardContent>
       </Card>

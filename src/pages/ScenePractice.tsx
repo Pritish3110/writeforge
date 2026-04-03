@@ -13,6 +13,7 @@ import { toast } from "@/components/ui/sonner";
 import { Download, Edit2, FileText, Loader2, Save, Sparkles, Trash2 } from "lucide-react";
 import { exportSceneAsDocx, exportSceneAsPdf, type ExportFormatMode } from "@/lib/sceneExport";
 import { cn } from "@/lib/utils";
+import { useDeleteConfirmation } from "@/components/DeleteConfirmationProvider";
 
 type SceneType = "Main Story Scene" | "Side Scene" | "Cool Scene" | "Activity Scene";
 
@@ -106,6 +107,7 @@ const formatSceneDate = (value: string) => {
 };
 
 const ScenePractice = () => {
+  const confirmDelete = useDeleteConfirmation();
   const [text, setText] = useState("");
   const [sceneTitle, setSceneTitle] = useState("");
   const [sceneType, setSceneType] = useState<SceneType>(DEFAULT_SCENE_TYPE);
@@ -204,11 +206,15 @@ const ScenePractice = () => {
     setSceneTitleError(null);
   };
 
-  const removeDraft = (id: string) => {
+  const removeDraft = async (id: string) => {
     const target = drafts.find((draft) => draft.id === id);
     if (!target) return;
 
-    const shouldDelete = window.confirm(`Delete "${target.title}"?`);
+    const shouldDelete = await confirmDelete({
+      title: `Delete "${target.title}"?`,
+      description: "This draft will be removed from your saved scenes library. This action cannot be undone.",
+      confirmLabel: "Delete Draft",
+    });
     if (!shouldDelete) return;
 
     setDrafts((prev) => prev.filter((draft) => draft.id !== id));
@@ -510,7 +516,7 @@ const ScenePractice = () => {
                                         variant="ghost"
                                         size="icon"
                                         className="h-8 w-8 text-muted-foreground hover:text-destructive"
-                                        onClick={() => removeDraft(draft.id)}
+                                        onClick={() => void removeDraft(draft.id)}
                                       >
                                         <Trash2 className="h-3.5 w-3.5" />
                                       </Button>

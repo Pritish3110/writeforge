@@ -25,6 +25,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Slider } from "@/components/ui/slider";
 import { Textarea } from "@/components/ui/textarea";
 import { toast } from "@/components/ui/sonner";
+import { useDeleteConfirmation } from "@/components/DeleteConfirmationProvider";
 import {
   GitFork,
   Minus,
@@ -84,6 +85,7 @@ const buildDefaultPositions = (characters: RelationshipCharacter[]) => {
 };
 
 const CharacterRelationships = () => {
+  const confirmDelete = useDeleteConfirmation();
   const svgRef = useRef<SVGSVGElement | null>(null);
   const [storedCharacters] = useLocalStorage<unknown[]>("writeforge-characters", []);
   const [storedRelationships, setStoredRelationships] = useLocalStorage<unknown[]>(
@@ -230,7 +232,15 @@ const CharacterRelationships = () => {
     }));
   };
 
-  const removeTimelineEntry = (id: string) => {
+  const removeTimelineEntry = async (id: string) => {
+    const target = form.timeline.find((entry) => entry.id === id);
+    const shouldDelete = await confirmDelete({
+      title: `Delete ${target?.label?.trim() ? `"${target.label}"` : "this timeline beat"}?`,
+      description: "This relationship timeline entry will be removed from the current form.",
+      confirmLabel: "Delete Event",
+    });
+    if (!shouldDelete) return;
+
     setForm((prev) => {
       const nextTimeline = prev.timeline.filter((entry) => entry.id !== id);
       return {
@@ -314,7 +324,17 @@ const CharacterRelationships = () => {
     setForm(createRelationshipFormState(characters));
   };
 
-  const handleDeleteRelationship = (id: string) => {
+  const handleDeleteRelationship = async (id: string) => {
+    const target = visibleRelationships.find((relationship) => relationship.id === id);
+    const left = target ? characterMap.get(target.characterAId)?.name || "Unknown" : "Unknown";
+    const right = target ? characterMap.get(target.characterBId)?.name || "Unknown" : "Unknown";
+    const shouldDelete = await confirmDelete({
+      title: `Delete relationship between ${left} and ${right}?`,
+      description: "This saved relationship and its timeline history will be removed.",
+      confirmLabel: "Delete Relationship",
+    });
+    if (!shouldDelete) return;
+
     setStoredRelationships((prev) =>
       normalizeCharacterRelationships(prev).filter(
         (relationship) => relationship.id !== id,
@@ -802,7 +822,7 @@ const CharacterRelationships = () => {
                           variant="ghost"
                           size="icon"
                           className="h-7 w-7 text-muted-foreground hover:text-destructive"
-                          onClick={() => removeTimelineEntry(entry.id)}
+                          onClick={() => void removeTimelineEntry(entry.id)}
                         >
                           <Trash2 className="h-3.5 w-3.5" />
                         </Button>
@@ -881,7 +901,7 @@ const CharacterRelationships = () => {
                             variant="ghost"
                             size="icon"
                             className="h-7 w-7 text-muted-foreground hover:text-destructive"
-                            onClick={() => handleDeleteRelationship(relationship.id)}
+                            onClick={() => void handleDeleteRelationship(relationship.id)}
                           >
                             <Trash2 className="h-3.5 w-3.5" />
                           </Button>

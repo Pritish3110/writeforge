@@ -40,6 +40,7 @@ import {
 import { Slider } from "@/components/ui/slider";
 import { Textarea } from "@/components/ui/textarea";
 import { toast } from "@/components/ui/sonner";
+import { useDeleteConfirmation } from "@/components/DeleteConfirmationProvider";
 import {
   ChevronDown,
   Flame,
@@ -189,6 +190,7 @@ const readStoredCollection = (key: string): unknown[] => {
 };
 
 const PlotBuilder = () => {
+  const confirmDelete = useDeleteConfirmation();
   const isMobile = useIsMobile();
   const [storedPlotPoints, setStoredPlotPoints] = useLocalStorage<unknown[]>(
     PLOT_BUILDER_STORAGE_KEY,
@@ -444,8 +446,14 @@ const PlotBuilder = () => {
     }
   };
 
-  const deletePlotPoint = (id: string) => {
+  const deletePlotPoint = async (id: string) => {
     const point = pointMap.get(id);
+    const shouldDelete = await confirmDelete({
+      title: `Delete "${point?.title || "this plot point"}"?`,
+      description: "This plot point will be removed from the board, and any foreshadowing links pointing to it will also be cleared.",
+      confirmLabel: "Delete Plot Point",
+    });
+    if (!shouldDelete) return;
 
     setStoredPlotPoints((prev) =>
       assignPhaseOrder(
@@ -787,7 +795,7 @@ const PlotBuilder = () => {
                   variant="ghost"
                   size="icon"
                   className="h-8 w-8 text-muted-foreground hover:text-destructive"
-                  onClick={() => deletePlotPoint(activePoint.id)}
+                  onClick={() => void deletePlotPoint(activePoint.id)}
                 >
                   <Trash2 className="h-4 w-4" />
                 </Button>

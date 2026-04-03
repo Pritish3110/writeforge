@@ -8,6 +8,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { cn } from "@/lib/utils";
+import { useDeleteConfirmation } from "@/components/DeleteConfirmationProvider";
 import { ArrowUpToLine, ChevronDown, Edit2, GripVertical, Pin, Plus, Search, Trash2, X } from "lucide-react";
 
 type CharacterType = "Main Character" | "Side Character" | "Activity Character";
@@ -345,6 +346,7 @@ const CharacterField = ({
 );
 
 const CharacterLab = () => {
+  const confirmDelete = useDeleteConfirmation();
   const [storedCharacters, setStoredCharacters] = useLocalStorage<unknown[]>("writeforge-characters", buildDefaultCharacters());
   const [characterSeedVersion, setCharacterSeedVersion] = useLocalStorage<number>("writeforge-character-seed-version", 0);
   const [editing, setEditing] = useState<Character | null>(null);
@@ -447,7 +449,15 @@ const CharacterLab = () => {
     );
   };
 
-  const removeTrait = (id: string) => {
+  const removeTrait = async (id: string) => {
+    const target = editing?.personality_traits.find((trait) => trait.id === id);
+    const shouldDelete = await confirmDelete({
+      title: `Delete ${target?.title?.trim() ? `"${target.title}"` : "this trait"}?`,
+      description: "This personality trait will be removed from the current character draft.",
+      confirmLabel: "Delete Trait",
+    });
+    if (!shouldDelete) return;
+
     setRemovingTraitId(id);
 
     window.setTimeout(() => {
@@ -474,7 +484,14 @@ const CharacterLab = () => {
     );
   };
 
-  const removeContradiction = (index: number) => {
+  const removeContradiction = async (index: number) => {
+    const shouldDelete = await confirmDelete({
+      title: `Delete contradiction ${index + 1}?`,
+      description: "This contradiction entry will be removed from the current character draft.",
+      confirmLabel: "Delete Contradiction",
+    });
+    if (!shouldDelete) return;
+
     setRemovingContradictionIndex(index);
 
     window.setTimeout(() => {
@@ -517,7 +534,15 @@ const CharacterLab = () => {
     setRemovingContradictionIndex(null);
   };
 
-  const remove = (id: string) => {
+  const remove = async (id: string) => {
+    const target = characters.find((character) => character.id === id);
+    const shouldDelete = await confirmDelete({
+      title: `Delete "${target?.name || "this character"}"?`,
+      description: "This character profile will be removed from Character Lab. This action cannot be undone.",
+      confirmLabel: "Delete Character",
+    });
+    if (!shouldDelete) return;
+
     setStoredCharacters((prev) => assignCharacterOrder(syncCharacters(prev, false).filter((character) => character.id !== id)));
 
     if (viewingCharacterId === id) {
@@ -772,7 +797,7 @@ const CharacterLab = () => {
                         >
                           <div className="flex items-center justify-between gap-2">
                             <p className="font-mono text-xs uppercase tracking-wider text-muted-foreground">Trait {index + 1}</p>
-                            <Button variant="ghost" size="icon" className="h-7 w-7 text-destructive" onClick={() => removeTrait(trait.id)}>
+                            <Button variant="ghost" size="icon" className="h-7 w-7 text-destructive" onClick={() => void removeTrait(trait.id)}>
                               <X className="h-3.5 w-3.5" />
                             </Button>
                           </div>
@@ -826,7 +851,7 @@ const CharacterLab = () => {
                         >
                           <div className="flex items-center justify-between gap-2">
                             <p className="font-mono text-xs uppercase tracking-wider text-muted-foreground">Contradiction {index + 1}</p>
-                            <Button variant="ghost" size="icon" className="h-7 w-7 text-destructive" onClick={() => removeContradiction(index)}>
+                            <Button variant="ghost" size="icon" className="h-7 w-7 text-destructive" onClick={() => void removeContradiction(index)}>
                               <X className="h-3.5 w-3.5" />
                             </Button>
                           </div>
@@ -1002,7 +1027,7 @@ const CharacterLab = () => {
                       className="h-7 w-7 text-destructive"
                       onClick={(event) => {
                         event.stopPropagation();
-                        remove(character.id);
+                        void remove(character.id);
                       }}
                     >
                       <Trash2 className="h-3.5 w-3.5" />

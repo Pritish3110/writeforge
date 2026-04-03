@@ -24,6 +24,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Switch } from "@/components/ui/switch";
 import { Textarea } from "@/components/ui/textarea";
 import { toast } from "@/components/ui/sonner";
+import { useDeleteConfirmation } from "@/components/DeleteConfirmationProvider";
 import {
   CheckCircle2,
   Copy,
@@ -171,6 +172,7 @@ const TaskPreviewCard = ({ task }: { task: CustomTask }) => {
 };
 
 const CustomTaskBuilder = () => {
+  const confirmDelete = useDeleteConfirmation();
   const { tasks, setTasks } = useCustomTasks();
   const [builderTask, setBuilderTask] = useState<CustomTask | null>(null);
   const [builderMode, setBuilderMode] = useState<"edit" | "preview">("edit");
@@ -226,7 +228,15 @@ const CustomTaskBuilder = () => {
     );
   };
 
-  const removeStep = (id: string) => {
+  const removeStep = async (id: string) => {
+    const target = builderTask?.steps.find((step) => step.id === id);
+    const shouldDelete = await confirmDelete({
+      title: `Delete ${target?.text?.trim() ? `step "${target.text}"` : "this step"}?`,
+      description: "This step will be removed from the current custom task draft.",
+      confirmLabel: "Delete Step",
+    });
+    if (!shouldDelete) return;
+
     setBuilderTask((prev) => {
       if (!prev) return prev;
 
@@ -262,7 +272,15 @@ const CustomTaskBuilder = () => {
     );
   };
 
-  const removeRule = (id: string) => {
+  const removeRule = async (id: string) => {
+    const target = builderTask?.importantRules.find((rule) => rule.id === id);
+    const shouldDelete = await confirmDelete({
+      title: `Delete ${target?.text?.trim() ? `rule "${target.text}"` : "this rule"}?`,
+      description: "This important-rule bullet will be removed from the current custom task draft.",
+      confirmLabel: "Delete Rule",
+    });
+    if (!shouldDelete) return;
+
     setBuilderTask((prev) => {
       if (!prev) return prev;
 
@@ -404,8 +422,17 @@ const CustomTaskBuilder = () => {
     });
   };
 
-  const deleteTask = (id: string) => {
+  const deleteTask = async (id: string) => {
     const target = tasks.find((task) => task.id === id);
+    if (!target) return;
+
+    const shouldDelete = await confirmDelete({
+      title: `Delete "${target.title || "this task"}"?`,
+      description: "This custom task will be removed from your writing system. This action cannot be undone.",
+      confirmLabel: "Delete Task",
+    });
+    if (!shouldDelete) return;
+
     setTasks((prev) => prev.filter((task) => task.id !== id));
 
     if (builderTask?.id === id) {
@@ -629,7 +656,7 @@ const CustomTaskBuilder = () => {
                             variant="ghost"
                             size="icon"
                             className="h-8 w-8 text-muted-foreground hover:text-destructive"
-                            onClick={() => removeStep(step.id)}
+                            onClick={() => void removeStep(step.id)}
                           >
                             <Trash2 className="h-4 w-4" />
                           </Button>
@@ -683,7 +710,7 @@ const CustomTaskBuilder = () => {
                           variant="ghost"
                           size="icon"
                           className="h-8 w-8 text-muted-foreground hover:text-destructive"
-                          onClick={() => removeRule(rule.id)}
+                          onClick={() => void removeRule(rule.id)}
                         >
                           <Trash2 className="h-4 w-4" />
                         </Button>
@@ -817,7 +844,7 @@ const CustomTaskBuilder = () => {
                           variant="ghost"
                           size="sm"
                           className="font-mono gap-2 text-muted-foreground hover:text-destructive"
-                          onClick={() => deleteTask(task.id)}
+                          onClick={() => void deleteTask(task.id)}
                         >
                           <Trash2 className="h-3.5 w-3.5" /> Delete
                         </Button>
