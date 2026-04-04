@@ -20,8 +20,18 @@ import {
   type PromptTone,
   type StoryPhase,
 } from "@/data/promptEngine";
-import { Download, Edit2, FileText, Loader2, RefreshCw, Save, Shuffle, Sparkles, Trash2 } from "lucide-react";
-import { exportSceneAsDocx, exportSceneAsPdf, type ExportFormatMode } from "@/lib/sceneExport";
+import { formatWorldCategoryLabel, formatWorldElementLabel } from "@/data/worldEngine";
+import {
+  clearStoredWorldElementSceneReference,
+  readStoredWorldElementSceneReference,
+} from "@/lib/worldElements";
+import { BookOpen, Download, Edit2, FileText, Loader2, RefreshCw, Save, Shuffle, Sparkles, Trash2, X } from "lucide-react";
+import {
+  exportSceneAsDocx,
+  exportSceneAsPdf,
+  hasExportableSceneText,
+  type ExportFormatMode,
+} from "@/lib/sceneExport";
 import { cn } from "@/lib/utils";
 import { useDeleteConfirmation } from "@/components/DeleteConfirmationProvider";
 
@@ -147,6 +157,7 @@ const ScenePractice = () => {
   const [lastGenerationRequest, setLastGenerationRequest] = useState<PromptGenerationRequest | null>(null);
   const [lastPromptMeta, setLastPromptMeta] = useState<(ReturnType<typeof generateSmartPrompt> & { mode: PromptGenerationMode }) | null>(null);
   const [drafts, setDrafts] = useState<Draft[]>(() => readStoredDrafts());
+  const [worldElementReference, setWorldElementReference] = useState(() => readStoredWorldElementSceneReference());
   const [activeSceneId, setActiveSceneId] = useState<string | null>(null);
   const [openSceneId, setOpenSceneId] = useState<string | null>(null);
   const [exportOpen, setExportOpen] = useState(false);
@@ -350,7 +361,17 @@ const ScenePractice = () => {
   };
 
   const handleExport = async (format: "pdf" | "google-docs") => {
-    if (!hasText) {
+    const editorElement = typeof document !== "undefined" ? document.getElementById("editor") : null;
+    const contentLength = text?.length ?? 0;
+
+    if (import.meta.env.DEV) {
+      console.log("Running export in dev mode");
+      console.log("Export triggered");
+      console.log("Content length:", contentLength);
+      console.log("Editor exists:", Boolean(editorElement));
+    }
+
+    if (!hasExportableSceneText(text)) {
       toast.error("Nothing to export");
       return;
     }
@@ -380,7 +401,7 @@ const ScenePractice = () => {
             : "Your scene was downloaded as a Google Docs-ready .docx file.",
       });
     } catch (error) {
-      console.error(error);
+      console.error("Export failed", error);
       toast.error("Export failed", {
         description: "Please try again.",
       });
@@ -399,6 +420,11 @@ const ScenePractice = () => {
 
   const handleRegenerateClick = () => {
     void runPromptGeneration(lastGenerationRequest || buildGenerationRequest("filtered"));
+  };
+
+  const clearWorldReference = () => {
+    clearStoredWorldElementSceneReference();
+    setWorldElementReference(null);
   };
 
   const currentCharacterLabel = selectedPromptCharacter?.name || "Unknown Character";
@@ -638,6 +664,86 @@ const ScenePractice = () => {
         </Card>
       )}
 
+      {worldElementReference && (
+        <Card className="glow-border bg-muted/20">
+          <CardHeader className="pb-3">
+            <div className="flex items-start justify-between gap-3">
+              <div>
+                <CardTitle className="font-mono text-base flex items-center gap-2">
+                  <BookOpen className="h-4 w-4 text-neon-cyan" />
+                  World Element Reference
+                </CardTitle>
+                <p className="mt-1 text-sm text-muted-foreground">
+                  Brought in from Daily Tasks. Keep it visible as scene pressure, setting logic, or narrative fuel.
+                </p>
+              </div>
+              <Button variant="ghost" size="icon" className="h-8 w-8" onClick={clearWorldReference}>
+                <X className="h-4 w-4" />
+              </Button>
+            </div>
+          </CardHeader>
+          <CardContent className="space-y-4">
+            <div className="flex flex-wrap items-center gap-2">
+              <Badge variant="outline" className="font-mono text-[10px] uppercase tracking-[0.18em]">
+                {formatWorldCategoryLabel(worldElementReference.category)}
+              </Badge>
+              <Badge variant="secondary" className="font-mono text-[10px] uppercase tracking-[0.18em]">
+                {formatWorldElementLabel(worldElementReference.element)}
+              </Badge>
+              <Badge variant="outline" className="font-mono text-[10px] uppercase tracking-[0.18em]">
+                {worldElementReference.title}
+              </Badge>
+            </div>
+
+            {worldElementReference.prompt && (
+              <div className="rounded-lg border border-border bg-background/40 p-3">
+                <p className="font-mono text-xs uppercase tracking-wider text-neon-pink">Source Prompt</p>
+                <p className="mt-2 text-sm leading-7">{worldElementReference.prompt}</p>
+              </div>
+            )}
+
+            <div className="rounded-lg border border-border bg-background/40 p-3">
+              <p className="font-mono text-xs uppercase tracking-wider text-neon-cyan">Quick Reference</p>
+              <p className="mt-2 text-sm leading-7 whitespace-pre-wrap">{worldElementReference.summary}</p>
+            </div>
+
+            <Accordion type="single" collapsible>
+              <AccordionItem value="world-element-details" className="border-none">
+                <AccordionTrigger className="py-0 hover:no-underline font-mono text-xs uppercase tracking-wider text-muted-foreground">
+                  View Structured Notes
+                </AccordionTrigger>
+                <AccordionContent className="pt-3">
+                  <div className="grid grid-cols-1 gap-3 md:grid-cols-2">
+                    {[
+                      { label: "Core Concept", value: worldElementReference.content.concept },
+                      { label: "Mechanics", value: worldElementReference.content.mechanics },
+                      { label: "Impact", value: worldElementReference.content.impact },
+                      { label: "Trade-offs", value: worldElementReference.content.tradeoffs },
+                      { label: "Story Use", value: worldElementReference.content.storyUse, fullWidth: true },
+                    ]
+                      .filter((section) => section.value.trim())
+                      .map((section) => (
+                        <div key={section.label} className={section.fullWidth ? "md:col-span-2" : ""}>
+                          <p className="font-mono text-xs uppercase tracking-wider text-muted-foreground">
+                            {section.label}
+                          </p>
+                          <div className="mt-1 rounded-lg border border-border bg-background/30 p-3 text-sm leading-7 whitespace-pre-wrap">
+                            {section.value}
+                          </div>
+                        </div>
+                      ))}
+                  </div>
+                </AccordionContent>
+              </AccordionItem>
+            </Accordion>
+
+            <p className="font-mono text-[11px] text-muted-foreground">
+              Sent to Scene Practice on {formatSceneDate(worldElementReference.sentAt)}
+            </p>
+          </CardContent>
+        </Card>
+      )}
+
       <div className="rounded-xl border border-border bg-muted/20 p-4 glow-border space-y-4">
         <div className="grid grid-cols-1 md:grid-cols-[minmax(0,1fr)_220px] gap-4">
           <div>
@@ -687,7 +793,7 @@ const ScenePractice = () => {
         )}
       </div>
 
-      <div className="relative">
+      <div id="editor" className="relative">
         <Textarea
           value={text}
           onChange={(e) => setText(e.target.value)}

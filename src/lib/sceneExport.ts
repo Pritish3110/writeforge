@@ -11,10 +11,29 @@ export interface SceneExportOptions {
 const LETTER_WIDTH_PT = 612;
 const LETTER_HEIGHT_PT = 792;
 const DEFAULT_FILE_STEM = "writing-session";
+const isBrowserExportEnvironment = () =>
+  typeof window !== "undefined" &&
+  typeof document !== "undefined" &&
+  typeof URL !== "undefined";
+
+export const normalizeExportText = (text: string): string =>
+  text.replace(/\r\n/g, "\n").trim();
+
+export const hasExportableSceneText = (text: string): boolean =>
+  normalizeExportText(text).length > 0;
+
+const assertExportReady = (options: SceneExportOptions) => {
+  if (!isBrowserExportEnvironment()) {
+    throw new Error("Scene export is only available in the browser.");
+  }
+
+  if (!hasExportableSceneText(options.text)) {
+    throw new Error("Nothing to export.");
+  }
+};
 
 const getParagraphs = (text: string): string[] =>
-  text
-    .trim()
+  normalizeExportText(text)
     .split(/\n\s*\n/)
     .map((paragraph) => paragraph.replace(/\n+/g, " ").trim())
     .filter(Boolean);
@@ -41,17 +60,25 @@ const buildMetadataLines = (sessionTitle: string, wordCount: number): string[] =
 ];
 
 const downloadBlob = (blob: Blob, fileName: string) => {
+  if (!isBrowserExportEnvironment()) {
+    throw new Error("File download is only available in the browser.");
+  }
+
   const url = URL.createObjectURL(blob);
   const link = document.createElement("a");
 
   link.href = url;
   link.download = fileName;
+  link.rel = "noopener";
+  document.body.appendChild(link);
   link.click();
+  link.remove();
 
   window.setTimeout(() => URL.revokeObjectURL(url), 1000);
 };
 
 export const exportSceneAsPdf = async (options: SceneExportOptions): Promise<string> => {
+  assertExportReady(options);
   const { jsPDF } = await import("jspdf");
 
   const pdf = new jsPDF({
@@ -125,6 +152,7 @@ export const exportSceneAsPdf = async (options: SceneExportOptions): Promise<str
 };
 
 export const exportSceneAsDocx = async (options: SceneExportOptions): Promise<string> => {
+  assertExportReady(options);
   const {
     AlignmentType,
     Document,

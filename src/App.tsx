@@ -19,6 +19,7 @@ import CharacterRelationships from "./pages/CharacterRelationships";
 import KnowledgeBase from "./pages/KnowledgeBase";
 import PlotBuilder from "./pages/PlotBuilder";
 import ScenePractice from "./pages/ScenePractice";
+import WorldElementDesignerPage from "./pages/WorldElementDesignerPage";
 import SettingsPage from "./pages/SettingsPage";
 import UpcomingFeatures from "./pages/UpcomingFeatures";
 import NotFound from "./pages/NotFound";
@@ -49,6 +50,7 @@ const App = () => {
                   <Route path="/character-relationships" element={<CharacterRelationships />} />
                   <Route path="/plot-builder" element={<PlotBuilder />} />
                   <Route path="/scene-practice" element={<ScenePractice />} />
+                  <Route path="/world-elements" element={<WorldElementDesignerPage />} />
                   <Route path="/custom-task-builder" element={<CustomTaskBuilder />} />
                   <Route path="/upcoming" element={<UpcomingFeatures />} />
                   <Route path="/settings" element={<SettingsPage />} />

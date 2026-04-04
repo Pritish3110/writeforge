@@ -12,7 +12,12 @@ import {
   duplicateCustomTask,
   type CustomTask,
   type CustomTaskCategory,
+  type CustomTaskDay,
 } from "@/lib/customTasks";
+import {
+  generateTask,
+  type GeneratedTaskResult,
+} from "@/lib/taskGenerator";
 import TaskSharingPanel from "@/components/taskSharing/TaskSharingPanel";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -30,9 +35,9 @@ import {
   Copy,
   Eye,
   GripVertical,
+  Loader2,
   Pencil,
   Plus,
-  Sparkles,
   Timer,
   Trash2,
   WandSparkles,
@@ -75,24 +80,6 @@ const getCategoryBadgeStyle = (category: CustomTaskCategory) => {
         color: "hsl(var(--foreground))",
       };
   }
-};
-
-const buildImprovedPrompt = (task: CustomTask) => {
-  const title = task.title.trim() || "Untitled exercise";
-  const basePrompt = task.prompt.trim() || `Create a ${task.category.toLowerCase()} exercise.`;
-
-  const categoryAngle =
-    task.category === "Dialogue"
-      ? "Let spoken words reveal pressure, subtext, and what the characters refuse to say."
-      : task.category === "Emotion"
-        ? "Make the emotional current visible through behavior, rhythm, and sensory detail."
-        : task.category === "Worldbuilding"
-          ? "Anchor the world through concrete details that affect the moment on the page."
-          : task.category === "Action"
-            ? "Keep the physical beats readable, specific, and escalating."
-            : "Give the writer a clear pressure point and a concrete outcome to chase.";
-
-  return `${title}: ${basePrompt} Push the writer to make one strong choice within ${task.durationMinutes} minutes. ${categoryAngle}`;
 };
 
 const TaskPreviewCard = ({ task }: { task: CustomTask }) => {
@@ -178,14 +165,22 @@ const CustomTaskBuilder = () => {
   const [builderMode, setBuilderMode] = useState<"edit" | "preview">("edit");
   const [draggedStepId, setDraggedStepId] = useState<string | null>(null);
   const [dragOverStepId, setDragOverStepId] = useState<string | null>(null);
+  const [isGeneratingTask, setIsGeneratingTask] = useState(false);
+  const [lastGeneratedTask, setLastGeneratedTask] = useState<GeneratedTaskResult | null>(null);
 
   const isEditingExisting = builderTask ? tasks.some((task) => task.id === builderTask.id) : false;
+
+  const resetTaskGenerator = () => {
+    setIsGeneratingTask(false);
+    setLastGeneratedTask(null);
+  };
 
   const openNewTask = () => {
     setBuilderTask(createEmptyCustomTask());
     setBuilderMode("edit");
     setDraggedStepId(null);
     setDragOverStepId(null);
+    resetTaskGenerator();
   };
 
   const editTask = (task: CustomTask) => {
@@ -193,6 +188,7 @@ const CustomTaskBuilder = () => {
     setBuilderMode("edit");
     setDraggedStepId(null);
     setDragOverStepId(null);
+    resetTaskGenerator();
   };
 
   const closeBuilder = () => {
@@ -200,6 +196,7 @@ const CustomTaskBuilder = () => {
     setBuilderMode("edit");
     setDraggedStepId(null);
     setDragOverStepId(null);
+    resetTaskGenerator();
   };
 
   const updateTask = (update: Partial<CustomTask>) => {
@@ -344,13 +341,58 @@ const CustomTaskBuilder = () => {
     setDragOverStepId(null);
   };
 
-  const improvePrompt = () => {
+  const applyGeneratedTask = async () => {
+    if (typeof window === "undefined") return;
+    if (typeof generateTask !== "function") {
+      console.error("Task generator not loaded");
+      return;
+    }
     if (!builderTask) return;
 
-    setBuilderTask((prev) => (prev ? { ...prev, prompt: buildImprovedPrompt(prev) } : prev));
-    toast.success("Prompt improved", {
-      description: "AI Assist placeholder rewrote the task prompt with stronger direction.",
-    });
+    setIsGeneratingTask(true);
+
+    try {
+      await new Promise<void>((resolve) => {
+        window.requestAnimationFrame(() => resolve());
+      });
+
+      const result = generateTask();
+
+      setBuilderTask((prev) =>
+        prev
+          ? {
+              ...prev,
+              title: result.title,
+              prompt: result.description,
+            }
+          : prev,
+      );
+      setLastGeneratedTask(result);
+
+      toast.success("Task generated", {
+        description: `${result.title} is ready to edit, assign, and refine.`,
+      });
+      if (result.recycledPool) {
+        toast.success("Task history refreshed", {
+          description: "The generator reset its no-repeat pool after exhausting recent combinations.",
+        });
+      }
+    } catch (error) {
+      console.error("Task generation failed", error);
+      toast.error("Task generation failed", {
+        description: "Please try again.",
+      });
+    } finally {
+      setIsGeneratingTask(false);
+    }
+  };
+
+  const handleGenerateTask = async () => {
+    await applyGeneratedTask();
+  };
+
+  const handleRegenerateTask = async () => {
+    await applyGeneratedTask();
   };
 
   const saveTask = () => {
@@ -580,25 +622,57 @@ const CustomTaskBuilder = () => {
                 <div className="space-y-2">
                   <div className="flex flex-wrap items-center justify-between gap-2">
                     <Label className="font-mono text-xs">Prompt</Label>
-                    <Button
-                      type="button"
-                      variant="outline"
-                      size="sm"
-                      className="font-mono gap-2"
-                      onClick={improvePrompt}
-                    >
-                      <WandSparkles className="h-3.5 w-3.5 text-neon-cyan" /> Improve Prompt
-                    </Button>
+                    <div className="flex flex-wrap gap-2">
+                      <Button
+                        type="button"
+                        variant="outline"
+                        size="sm"
+                        className="font-mono gap-2"
+                        onClick={() => void handleGenerateTask()}
+                        disabled={isGeneratingTask}
+                      >
+                        {isGeneratingTask ? (
+                          <Loader2 className="h-3.5 w-3.5 animate-spin text-neon-cyan" />
+                        ) : (
+                          <WandSparkles className="h-3.5 w-3.5 text-neon-cyan" />
+                        )}
+                        Generate Task
+                      </Button>
+                      <Button
+                        type="button"
+                        variant="outline"
+                        size="sm"
+                        className="font-mono gap-2"
+                        onClick={() => void handleRegenerateTask()}
+                        disabled={isGeneratingTask}
+                      >
+                        <WandSparkles className="h-3.5 w-3.5 text-neon-purple" />
+                        Regenerate
+                      </Button>
+                    </div>
                   </div>
                   <Textarea
                     value={builderTask.prompt}
-                    onChange={(event) => updateTask({ prompt: event.target.value })}
+                    onChange={(event) => {
+                      updateTask({ prompt: event.target.value });
+                      setLastGeneratedTask(null);
+                    }}
                     placeholder="Define the core writing instruction for this exercise."
                     className="min-h-[120px]"
                   />
-                  <p className="text-xs text-muted-foreground">
-                    AI Assist is currently a mock rewrite helper so we can wire the UX before adding a real model.
-                  </p>
+                  {isGeneratingTask && (
+                    <p className="text-xs text-muted-foreground">Generating skill-based task...</p>
+                  )}
+                  {!isGeneratingTask && lastGeneratedTask && (
+                    <p className="text-xs text-muted-foreground">
+                      Generated a reusable writing exercise focused on {lastGeneratedTask.focus}.
+                    </p>
+                  )}
+                  {!isGeneratingTask && !lastGeneratedTask && (
+                    <p className="text-xs text-muted-foreground">
+                      Task Generator fills the title plus prompt, and everything stays editable before you save.
+                    </p>
+                  )}
                 </div>
 
                 <div className="space-y-3 rounded-xl border border-border bg-muted/20 p-4">
@@ -774,7 +848,7 @@ const CustomTaskBuilder = () => {
         {tasks.length === 0 ? (
           <Card className="glow-border border-dashed bg-muted/10">
             <CardContent className="flex flex-col items-center justify-center gap-3 py-10 text-center">
-              <Sparkles className="h-8 w-8 text-neon-purple" />
+              <WandSparkles className="h-8 w-8 text-neon-purple" />
               <div>
                 <p className="font-mono text-sm">No custom tasks yet</p>
                 <p className="mt-1 text-sm text-muted-foreground">

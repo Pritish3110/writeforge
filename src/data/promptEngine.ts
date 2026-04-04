@@ -13,9 +13,11 @@ export interface PromptCharacter {
 type PromptCharacterInput = PromptCharacter | string | null | undefined;
 
 export interface GenerateSmartPromptOptions {
-  tone?: PromptTone | null;
+  basePrompt?: string | null;
+  tone?: PromptTone | "Any" | null;
   character?: PromptCharacterInput;
-  phase?: StoryPhase | string | null;
+  phase?: StoryPhase | "Any" | string | null;
+  avoidRepeat?: boolean;
 }
 
 export interface GeneratedPromptResult {
@@ -210,16 +212,47 @@ const toTitleCase = (value: string): string => {
     .join(" ");
 };
 
-const normalizeTone = (tone?: PromptTone | null): PromptTone =>
-  tone && PROMPT_TONES.includes(tone) ? tone : "dark";
+const normalizeTone = (tone?: PromptTone | "Any" | null): PromptTone => {
+  if (tone && PROMPT_TONES.includes(tone as PromptTone)) return tone as PromptTone;
+  return getRandom(PROMPT_TONES);
+};
 
-const normalizePhase = (phase?: StoryPhase | string | null): StoryPhase => {
+const normalizePhase = (phase?: StoryPhase | "Any" | string | null): StoryPhase => {
   const normalized = toText(phase).trim().toLowerCase();
 
   if (normalized === "promise") return "Promise";
   if (normalized === "payoff") return "Payoff";
-  return "Progress";
+  if (normalized === "progress") return "Progress";
+  return getRandom(STORY_PHASES);
 };
+
+const normalizePromptCharacterInput = (character?: PromptCharacterInput): PromptCharacterInput => {
+  if (typeof character !== "string") return character;
+  return character.trim().toLowerCase() === "any" ? null : character;
+};
+
+const ensureSentence = (value: string): string => {
+  const trimmed = value.trim();
+  if (!trimmed) return "";
+  return /[.!?]$/.test(trimmed) ? trimmed : `${trimmed}.`;
+};
+
+const enhanceBasePrompt = ({
+  basePrompt,
+  generatedPrompt,
+}: {
+  basePrompt: string;
+  generatedPrompt: string;
+}) =>
+  polishPrompt(
+    [
+      ensureSentence(basePrompt),
+      generatedPrompt,
+      "Keep the original exercise goal at the center of the scene and use the added pressure to sharpen the writing task.",
+    ]
+      .filter(Boolean)
+      .join(" "),
+  );
 
 const getCharacterPromptName = (character?: PromptCharacterInput): string => {
   if (typeof character === "string") return character.trim() || "A character";
@@ -345,23 +378,40 @@ export const resetUsedPrompts = () => {
 
 export const getUsedPromptCount = () => usedPrompts.size;
 
-export function generateSmartPrompt({ tone, character, phase }: GenerateSmartPromptOptions): GeneratedPromptResult {
+export function generateSmartPrompt({
+  basePrompt,
+  tone,
+  character,
+  phase,
+  avoidRepeat = true,
+}: GenerateSmartPromptOptions): GeneratedPromptResult {
   const resolvedTone = normalizeTone(tone);
   const resolvedPhase = normalizePhase(phase);
-  const characterName = getCharacterPromptName(character);
-  const characterNote = buildCharacterNote(character, resolvedTone);
+  const normalizedCharacter = normalizePromptCharacterInput(character);
+  const characterName = getCharacterPromptName(normalizedCharacter);
+  const characterNote = buildCharacterNote(normalizedCharacter, resolvedTone);
+  const cleanedBasePrompt = toText(basePrompt).trim();
 
   if (PROMPT_TEMPLATES.length === 0 || CONFLICTS.length === 0 || LOCATIONS.length === 0 || TWISTS.length === 0) {
-    const fallbackPrompt = getFallbackPrompt(character, resolvedPhase, resolvedTone);
-    usedPrompts.add(fallbackPrompt);
+    const fallbackPrompt = getFallbackPrompt(normalizedCharacter, resolvedPhase, resolvedTone);
+    const finalPrompt = cleanedBasePrompt
+      ? enhanceBasePrompt({
+          basePrompt: cleanedBasePrompt,
+          generatedPrompt: fallbackPrompt,
+        })
+      : fallbackPrompt;
+
+    if (avoidRepeat) {
+      usedPrompts.add(finalPrompt);
+    }
 
     return {
-      prompt: fallbackPrompt,
-      title: getFallbackTitle(character, resolvedPhase),
+      prompt: finalPrompt,
+      title: getFallbackTitle(normalizedCharacter, resolvedPhase),
       tone: resolvedTone,
       phase: resolvedPhase,
-      characterLabel: getCharacterLabel(character),
-      tags: ["fallback", "legacy"],
+      characterLabel: getCharacterLabel(normalizedCharacter),
+      tags: cleanedBasePrompt ? ["fallback", "legacy", "enhanced"] : ["fallback", "legacy"],
       usedCount: usedPrompts.size,
       recycledPool: false,
       source: "fallback",
@@ -396,17 +446,23 @@ export function generateSmartPrompt({ tone, character, phase }: GenerateSmartPro
         .filter(Boolean)
         .join(" "),
     );
+    if (cleanedBasePrompt) {
+      nextPrompt = enhanceBasePrompt({
+        basePrompt: cleanedBasePrompt,
+        generatedPrompt: nextPrompt,
+      });
+    }
     nextTitle = generateTitle({
-      character,
+      character: normalizedCharacter,
       conflict,
       location,
     });
 
-    if (!usedPrompts.has(nextPrompt)) break;
+    if (!avoidRepeat || !usedPrompts.has(nextPrompt)) break;
     attempts += 1;
   }
 
-  if (!nextPrompt || usedPrompts.has(nextPrompt)) {
+  if (!nextPrompt || (avoidRepeat && usedPrompts.has(nextPrompt))) {
     resetUsedPrompts();
     const conflict = getRandom(CONFLICTS);
     const location = getRandom(LOCATIONS);
@@ -420,17 +476,25 @@ export function generateSmartPrompt({ tone, character, phase }: GenerateSmartPro
         twist,
       })} ${getRandom(TONE_GUIDANCE[resolvedTone])} ${getRandom(PHASE_GUIDANCE[resolvedPhase])} ${characterNote}`,
     );
+    if (cleanedBasePrompt) {
+      nextPrompt = enhanceBasePrompt({
+        basePrompt: cleanedBasePrompt,
+        generatedPrompt: nextPrompt,
+      });
+    }
     nextTitle = generateTitle({
-      character,
+      character: normalizedCharacter,
       conflict,
       location,
     });
   }
 
-  usedPrompts.add(nextPrompt);
+  if (avoidRepeat) {
+    usedPrompts.add(nextPrompt);
+  }
 
   let recycledPool = false;
-  if (usedPrompts.size > MAX_USED_PROMPTS) {
+  if (avoidRepeat && usedPrompts.size > MAX_USED_PROMPTS) {
     usedPrompts.clear();
     usedPrompts.add(nextPrompt);
     recycledPool = true;
@@ -438,11 +502,15 @@ export function generateSmartPrompt({ tone, character, phase }: GenerateSmartPro
 
   return {
     prompt: nextPrompt,
-    title: nextTitle || getFallbackTitle(character, resolvedPhase),
+    title: nextTitle || getFallbackTitle(normalizedCharacter, resolvedPhase),
     tone: resolvedTone,
     phase: resolvedPhase,
-    characterLabel: getCharacterLabel(character),
-    tags: ["combinator", "no-repeat"],
+    characterLabel: getCharacterLabel(normalizedCharacter),
+    tags: [
+      "combinator",
+      ...(avoidRepeat ? ["no-repeat"] : []),
+      ...(cleanedBasePrompt ? ["enhanced"] : []),
+    ],
     usedCount: usedPrompts.size,
     recycledPool,
     source: "combinator",

@@ -15,7 +15,7 @@ const SettingsPage = () => {
   const handleReset = async () => {
     const shouldReset = await confirmDelete({
       title: "Reset all progress?",
-      description: "This will delete your tasks, characters, relationships, plot points, and saved drafts from local storage. This action cannot be undone.",
+      description: "This will delete your tasks, characters, relationships, plot points, world elements, and saved drafts from local storage. This action cannot be undone.",
       confirmLabel: "Reset Everything",
       badgeLabel: "Destructive Action",
     });
@@ -30,6 +30,8 @@ const SettingsPage = () => {
     localStorage.removeItem("writeforge-custom-tasks");
     localStorage.removeItem("writeforge-plot-builder");
     localStorage.removeItem("writeforge-drafts");
+    localStorage.removeItem("writeforge-world-elements");
+    localStorage.removeItem("writeforge-scene-practice-world-element");
   };
 
   return (
@@ -66,7 +68,7 @@ const SettingsPage = () => {
         <CardContent className="space-y-4">
           <div>
             <p className="text-sm">All your data is stored locally in your browser using localStorage.</p>
-            <p className="text-xs text-muted-foreground mt-1">Tasks, characters, drafts, and preferences are persisted between sessions.</p>
+            <p className="text-xs text-muted-foreground mt-1">Tasks, characters, world elements, drafts, and preferences are persisted between sessions.</p>
           </div>
           <div className="border-t border-border pt-4">
             <Button
@@ -77,7 +79,7 @@ const SettingsPage = () => {
               <AlertTriangle className="h-4 w-4" />
               Reset All Progress
             </Button>
-            <p className="text-xs text-destructive mt-2">This will delete all tasks, characters, and drafts. This cannot be undone.</p>
+            <p className="text-xs text-destructive mt-2">This will delete all tasks, characters, world elements, and drafts. This cannot be undone.</p>
           </div>
         </CardContent>
       </Card>

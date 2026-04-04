@@ -1,6 +1,6 @@
 import {
   LayoutDashboard, CalendarCheck, CalendarDays, BarChart3,
-  FlaskConical, PenTool, Settings, Moon, Sun, BookOpen, Rocket, Wrench, Activity, GitFork, Map,
+  FlaskConical, PenTool, Settings, Moon, Sun, BookOpen, Rocket, Wrench, Activity, GitFork, Map, Sparkles,
 } from "lucide-react";
 import { NavLink } from "@/components/NavLink";
 import { useLocation } from "react-router-dom";
@@ -21,6 +21,7 @@ const items = [
   { title: "Character Relationships", url: "/character-relationships", icon: GitFork },
   { title: "Plot Builder", url: "/plot-builder", icon: Map },
   { title: "Scene Practice", url: "/scene-practice", icon: PenTool },
+  { title: "World Element Designer", url: "/world-elements", icon: Sparkles },
   { title: "Custom Task Builder", url: "/custom-task-builder", icon: Wrench },
   { title: "Upcoming Features", url: "/upcoming", icon: Rocket },
   { title: "Settings", url: "/settings", icon: Settings },
