@@ -80,6 +80,19 @@ describe("taskTracking", () => {
     expect(totalCategoryCompletions).toBe(5);
   });
 
+  it("keeps the current streak through today and resets it tomorrow if today stays incomplete", () => {
+    const records: TaskRecord[] = [
+      { taskId: "fri-1", weekKey: "2026-03-30", completed: true, completedOn: "2026-04-03" },
+      { taskId: "sat-1", weekKey: "2026-03-30", completed: true, completedOn: "2026-04-04" },
+    ];
+
+    const streakOnSunday = getStreakInfo(records, [], 365, localDate(2026, 4, 5));
+    const streakOnMonday = getStreakInfo(records, [], 365, localDate(2026, 4, 6));
+
+    expect(streakOnSunday).toEqual({ current: 2, longest: 2 });
+    expect(streakOnMonday).toEqual({ current: 0, longest: 2 });
+  });
+
   it("keeps migrated week-only records checked without fabricating streak activity", () => {
     const records = syncTaskRecords([
       { taskId: "tue-1", weekKey: "2026-04-06", completed: true },

@@ -18,7 +18,7 @@ const WeeklySchedule = () => {
       <div>
         <h1 className="text-3xl font-bold tracking-tight">Weekly Schedule</h1>
         <p className="text-muted-foreground mt-1 font-mono text-sm">
-          Tasks stay checked through Sunday and reset on Monday. Your streak only moves forward when at least one task is checked on its actual day.
+          Tasks stay checked through Sunday and reset on Monday. Your streak only moves forward when at least one task is checked on its actual day, and it carries through the current day before resetting tomorrow if today stays incomplete.
         </p>
       </div>
 
@@ -46,7 +46,7 @@ const WeeklySchedule = () => {
           </CardHeader>
           <CardContent>
             <p className="text-3xl font-bold font-mono">{streak.current}</p>
-            <p className="text-xs text-muted-foreground mt-1">days with at least one same-day check-off</p>
+            <p className="text-xs text-muted-foreground mt-1">grace holds through today, then resets tomorrow if today is missed</p>
           </CardContent>
         </Card>
 

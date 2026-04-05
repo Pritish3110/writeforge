@@ -90,7 +90,7 @@ const DailyTasks = () => {
         <p className="text-muted-foreground mt-1 font-mono text-sm">Select a day and complete your writing exercises.</p>
         {!isViewingToday && (
           <p className="text-xs text-muted-foreground mt-2 font-mono">
-            Tasks checked here will stay marked for this Monday-Sunday cycle, but only tasks checked on their actual day extend your streak.
+            Tasks checked here will stay marked for this Monday-Sunday cycle, but only tasks checked on their actual day extend your streak, and a missed day resets the streak on the following day.
           </p>
         )}
       </div>

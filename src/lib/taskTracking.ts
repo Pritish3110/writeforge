@@ -235,27 +235,36 @@ export const getStreakInfo = (
   lookbackDays = 365,
   endDate: Date = new Date(),
 ): StreakInfo => {
-  let current = 0;
   let longest = 0;
   let running = 0;
-  let currentOpen = true;
+  const dailyActivity: boolean[] = [];
 
-  for (let index = 0; index < lookbackDays; index += 1) {
+  for (let index = lookbackDays - 1; index >= 0; index -= 1) {
     const date = createLocalNoonDate(endDate.getFullYear(), endDate.getMonth(), endDate.getDate());
     date.setDate(date.getDate() - index);
     const daySummary = getDayActivitySummary(records, customTasks, date);
+    const hasCompletedTask = daySummary.completed > 0;
 
-    if (daySummary.completed > 0) {
+    dailyActivity.push(hasCompletedTask);
+
+    if (hasCompletedTask) {
       running += 1;
       longest = Math.max(longest, running);
-
-      if (currentOpen) {
-        current += 1;
-      }
     } else {
       running = 0;
-      currentOpen = false;
     }
+  }
+
+  let current = 0;
+  let currentIndex = dailyActivity.length - 1;
+
+  if (currentIndex >= 0 && !dailyActivity[currentIndex]) {
+    currentIndex -= 1;
+  }
+
+  while (currentIndex >= 0 && dailyActivity[currentIndex]) {
+    current += 1;
+    currentIndex -= 1;
   }
 
   return { current, longest };
