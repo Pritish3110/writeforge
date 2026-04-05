@@ -10,7 +10,7 @@ import {
   getStreakInfo,
   getWeekKey,
   isTaskCompletedForDate,
-  syncTaskRecords,
+  resolveTaskRecords,
   type StreakInfo,
   type TaskRecord,
 } from "@/lib/taskTracking";
@@ -18,13 +18,16 @@ import {
 export function useTaskTracking() {
   const [storedRecords, setStoredRecords] = useLocalStorage<unknown[]>("writeforge-tasks", []);
   const { tasks: customTasks } = useCustomTasks();
-  const records = useMemo(() => syncTaskRecords(storedRecords), [storedRecords]);
+  const records = useMemo(
+    () => resolveTaskRecords(storedRecords, customTasks),
+    [storedRecords, customTasks],
+  );
 
   const toggleTask = (taskId: string, date: Date = new Date()) => {
     const weekKey = getWeekKey(date);
     const completedOn = formatLocalDate(date);
     setStoredRecords((prev) => {
-      const nextRecords = syncTaskRecords(prev);
+      const nextRecords = resolveTaskRecords(prev, customTasks);
       const idx = nextRecords.findIndex((record) => record.weekKey === weekKey && record.taskId === taskId);
 
       if (idx >= 0) {

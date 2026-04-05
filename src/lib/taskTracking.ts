@@ -134,6 +134,57 @@ export const syncTaskRecords = (value: unknown): TaskRecord[] => {
   );
 };
 
+const getTaskDayLookup = (customTasks: CustomTask[]): Map<string, string> => {
+  const lookup = new Map<string, string>();
+
+  DAYS.forEach((day) => {
+    getDailyTasksForDay(day, customTasks).forEach((task) => {
+      if (!lookup.has(task.id)) {
+        lookup.set(task.id, day);
+      }
+    });
+  });
+
+  return lookup;
+};
+
+const getScheduledDateForTask = (
+  taskId: string,
+  weekKey: string,
+  taskDayLookup: Map<string, string>,
+): string | null => {
+  const dayName = taskDayLookup.get(taskId);
+  const weekStart = parseLocalDate(weekKey);
+
+  if (!dayName || !weekStart) return null;
+
+  const scheduledDate = createLocalNoonDate(
+    weekStart.getFullYear(),
+    weekStart.getMonth(),
+    weekStart.getDate(),
+  );
+  const dayIndex = DAYS.indexOf(dayName);
+
+  if (dayIndex < 0) return null;
+
+  scheduledDate.setDate(scheduledDate.getDate() + dayIndex);
+
+  return formatLocalDate(scheduledDate);
+};
+
+export const resolveTaskRecords = (value: unknown, customTasks: CustomTask[]): TaskRecord[] =>
+  {
+    const taskDayLookup = getTaskDayLookup(customTasks);
+
+    return syncTaskRecords(value).map((record) => {
+      if (!record.completed || record.completedOn) return record;
+
+      const completedOn = getScheduledDateForTask(record.taskId, record.weekKey, taskDayLookup);
+
+      return completedOn ? { ...record, completedOn } : record;
+    });
+  };
+
 const isTaskCompletedInWeek = (records: TaskRecord[], taskId: string, weekKey: string): boolean =>
   records.some((record) => record.weekKey === weekKey && record.taskId === taskId && record.completed);
 

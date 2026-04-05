@@ -7,6 +7,7 @@ import {
   getStreakInfo,
   getWeekKey,
   isTaskCompletedForDate,
+  resolveTaskRecords,
   syncTaskRecords,
   type TaskRecord,
 } from "@/lib/taskTracking";
@@ -93,18 +94,40 @@ describe("taskTracking", () => {
     expect(streakOnMonday).toEqual({ current: 0, longest: 2 });
   });
 
-  it("keeps migrated week-only records checked without fabricating streak activity", () => {
-    const records = syncTaskRecords([
-      { taskId: "tue-1", weekKey: "2026-04-06", completed: true },
-    ]);
+  it("recovers streak and analytics from existing week-only records on older installs", () => {
+    const records = resolveTaskRecords([
+      { taskId: "fri-1", weekKey: "2026-03-30", completed: true },
+      { taskId: "sat-1", weekKey: "2026-03-30", completed: true },
+      { taskId: "sun-1", weekKey: "2026-03-30", completed: false },
+    ], []);
 
-    const scheduledTuesday = getDayCompletionSummary(records, [], localDate(2026, 4, 7));
-    const history = getCompletionHistory(records, [], 7, localDate(2026, 4, 12));
+    const scheduledFriday = getDayCompletionSummary(records, [], localDate(2026, 4, 3));
+    const scheduledSaturday = getDayCompletionSummary(records, [], localDate(2026, 4, 4));
+    const streakOnSunday = getStreakInfo(records, [], 365, localDate(2026, 4, 5));
+    const streakOnMonday = getStreakInfo(records, [], 365, localDate(2026, 4, 6));
+    const history = getCompletionHistory(records, [], 7, localDate(2026, 4, 5));
+    const historyByDate = Object.fromEntries(history.map((day) => [day.date, day]));
 
     expect(records).toEqual([
-      { taskId: "tue-1", weekKey: "2026-04-06", completed: true, completedOn: null },
+      { taskId: "fri-1", weekKey: "2026-03-30", completed: true, completedOn: "2026-04-03" },
+      { taskId: "sat-1", weekKey: "2026-03-30", completed: true, completedOn: "2026-04-04" },
+      { taskId: "sun-1", weekKey: "2026-03-30", completed: false, completedOn: null },
     ]);
-    expect(scheduledTuesday).toMatchObject({ completed: 1, total: 3 });
-    expect(history.find((day) => day.date === "2026-04-07")).toMatchObject({ completed: 0, total: 3 });
+    expect(scheduledFriday).toMatchObject({ completed: 1, total: 3 });
+    expect(scheduledSaturday).toMatchObject({ completed: 1, total: 2 });
+    expect(historyByDate["2026-04-03"]).toMatchObject({ completed: 1, total: 3 });
+    expect(historyByDate["2026-04-04"]).toMatchObject({ completed: 1, total: 2 });
+    expect(streakOnSunday).toEqual({ current: 2, longest: 2 });
+    expect(streakOnMonday).toEqual({ current: 0, longest: 2 });
+  });
+
+  it("keeps unresolved week-only records checked even when a completion date cannot be inferred", () => {
+    const records = resolveTaskRecords([
+      { taskId: "unknown-task", weekKey: "2026-04-06", completed: true },
+    ], []);
+
+    expect(records).toEqual([
+      { taskId: "unknown-task", weekKey: "2026-04-06", completed: true, completedOn: null },
+    ]);
   });
 });
