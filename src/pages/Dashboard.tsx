@@ -16,11 +16,14 @@ const getGreeting = () => {
 
 const Dashboard = () => {
   const navigate = useNavigate();
-  const { getTodayCompleted, getLast7Days, getStreak } = useTaskTracking();
+  const { getCurrentWeek, getTodayCompleted, getLast7Days, getStreak } = useTaskTracking();
   const today = getTodayCompleted();
   const last7 = getLast7Days();
+  const currentWeek = getCurrentWeek();
   const streak = getStreak();
   const pct = today.total > 0 ? Math.round((today.completed / today.total) * 100) : 0;
+  const weekCompleted = currentWeek.reduce((sum, day) => sum + day.completed, 0);
+  const weekTotal = currentWeek.reduce((sum, day) => sum + day.total, 0);
 
   return (
     <div className="max-w-4xl mx-auto space-y-6">
@@ -66,8 +69,8 @@ const Dashboard = () => {
           </CardHeader>
           <CardContent>
             <p className="text-3xl font-bold font-mono">
-              {last7.reduce((a, b) => a + b.completed, 0)}
-              <span className="text-muted-foreground text-lg">/{last7.reduce((a, b) => a + b.total, 0)}</span>
+              {weekCompleted}
+              <span className="text-muted-foreground text-lg">/{weekTotal}</span>
             </p>
           </CardContent>
         </Card>

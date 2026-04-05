@@ -67,10 +67,12 @@ const TaskTimer = ({ minutes = 30 }: { minutes?: number }) => {
 };
 
 const DailyTasks = () => {
-  const [selectedDay, setSelectedDay] = useState(getDayName());
+  const todayName = getDayName();
+  const [selectedDay, setSelectedDay] = useState(todayName);
   const { toggleTask, isCompleted } = useTaskTracking();
   const { tasks: customTasks } = useCustomTasks();
   const [justCompleted, setJustCompleted] = useState<string | null>(null);
+  const isViewingToday = selectedDay === todayName;
   const tasks = getDailyTasksForDay(selectedDay, customTasks);
   const completed = tasks.filter((t) => isCompleted(t.id)).length;
   const pct = tasks.length > 0 ? Math.round((completed / tasks.length) * 100) : 0;
@@ -86,6 +88,11 @@ const DailyTasks = () => {
       <div>
         <h1 className="text-3xl font-bold tracking-tight">Daily Tasks</h1>
         <p className="text-muted-foreground mt-1 font-mono text-sm">Select a day and complete your writing exercises.</p>
+        {!isViewingToday && (
+          <p className="text-xs text-muted-foreground mt-2 font-mono">
+            Tasks checked here will stay marked for this Monday-Sunday cycle, but only tasks checked on their actual day extend your streak.
+          </p>
+        )}
       </div>
 
       <div className="flex gap-2 flex-wrap">

@@ -1,20 +1,13 @@
 import { useTaskTracking } from "@/hooks/useTaskTracking";
-import { DAYS } from "@/data/tasks";
-import { useCustomTasks } from "@/hooks/useCustomTasks";
-import { getDailyTasksForDay } from "@/lib/customTasks";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Progress } from "@/components/ui/progress";
-import { CheckCircle2, Circle } from "lucide-react";
+import { parseLocalDate } from "@/lib/taskTracking";
+import { CheckCircle2, Circle, Flame, Trophy } from "lucide-react";
 
 const WeeklySchedule = () => {
-  const { isCompleted } = useTaskTracking();
-  const { tasks: customTasks } = useCustomTasks();
-
-  const weekData = DAYS.map((day) => {
-    const tasks = getDailyTasksForDay(day, customTasks);
-    const completed = tasks.filter((t) => isCompleted(t.id)).length;
-    return { day, tasks, completed, total: tasks.length };
-  });
+  const { getCurrentWeek, getStreak, isCompleted } = useTaskTracking();
+  const weekData = getCurrentWeek();
+  const streak = getStreak();
 
   const totalCompleted = weekData.reduce((a, d) => a + d.completed, 0);
   const totalTasks = weekData.reduce((a, d) => a + d.total, 0);
@@ -24,7 +17,50 @@ const WeeklySchedule = () => {
     <div className="max-w-4xl mx-auto space-y-6">
       <div>
         <h1 className="text-3xl font-bold tracking-tight">Weekly Schedule</h1>
-        <p className="text-muted-foreground mt-1 font-mono text-sm">Overview of all tasks across the week.</p>
+        <p className="text-muted-foreground mt-1 font-mono text-sm">
+          Tasks stay checked through Sunday and reset on Monday. Your streak only moves forward when at least one task is checked on its actual day.
+        </p>
+      </div>
+
+      <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+        <Card className="glow-card glow-border">
+          <CardHeader className="pb-2">
+            <CardTitle className="text-sm font-mono text-muted-foreground flex items-center gap-2">
+              <CheckCircle2 className="h-4 w-4 text-neon-cyan" /> Completed This Week
+            </CardTitle>
+          </CardHeader>
+          <CardContent>
+            <p className="text-3xl font-bold font-mono">
+              {totalCompleted}
+              <span className="text-muted-foreground text-lg">/{totalTasks}</span>
+            </p>
+            <p className="text-xs text-muted-foreground mt-1">{weekPct}% of this week's tasks are checked</p>
+          </CardContent>
+        </Card>
+
+        <Card className="glow-card glow-border">
+          <CardHeader className="pb-2">
+            <CardTitle className="text-sm font-mono text-muted-foreground flex items-center gap-2">
+              <Flame className="h-4 w-4 text-neon-pink" /> Current Streak
+            </CardTitle>
+          </CardHeader>
+          <CardContent>
+            <p className="text-3xl font-bold font-mono">{streak.current}</p>
+            <p className="text-xs text-muted-foreground mt-1">days with at least one same-day check-off</p>
+          </CardContent>
+        </Card>
+
+        <Card className="glow-card glow-border">
+          <CardHeader className="pb-2">
+            <CardTitle className="text-sm font-mono text-muted-foreground flex items-center gap-2">
+              <Trophy className="h-4 w-4 text-neon-purple" /> Longest Streak
+            </CardTitle>
+          </CardHeader>
+          <CardContent>
+            <p className="text-3xl font-bold font-mono">{streak.longest}</p>
+            <p className="text-xs text-muted-foreground mt-1">best consecutive daily streak so far</p>
+          </CardContent>
+        </Card>
       </div>
 
       <div className="space-y-1">
@@ -36,7 +72,7 @@ const WeeklySchedule = () => {
       </div>
 
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
-        {weekData.map(({ day, tasks, completed, total }) => (
+        {weekData.map(({ day, date, tasks, completed, total }) => (
           <Card key={day} className="glow-card glow-border">
             <CardHeader className="pb-2">
               <CardTitle className="text-base font-mono flex items-center justify-between">
@@ -46,7 +82,7 @@ const WeeklySchedule = () => {
             </CardHeader>
             <CardContent className="space-y-2">
               {tasks.map((task) => {
-                const done = isCompleted(task.id);
+                const done = isCompleted(task.id, parseLocalDate(date) ?? new Date());
                 return (
                   <div key={task.id} className="flex items-center gap-2 text-sm">
                     {done ? (

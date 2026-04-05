@@ -4,8 +4,9 @@ import { LineChart, Line, BarChart, Bar, XAxis, YAxis, ResponsiveContainer, Tool
 import { Flame, Trophy } from "lucide-react";
 
 const Analytics = () => {
-  const { getLast7Days, getStreak, getCategoryStats } = useTaskTracking();
+  const { getLast7Days, getLast28Days, getStreak, getCategoryStats } = useTaskTracking();
   const last7 = getLast7Days();
+  const last28 = getLast28Days();
   const streak = getStreak();
   const catStats = getCategoryStats();
 
@@ -15,15 +16,17 @@ const Analytics = () => {
   }));
 
   // Simple heatmap for last 28 days
-  const heatmap: { date: string; level: number }[] = [];
-  for (let i = 27; i >= 0; i--) {
-    const d = new Date();
-    d.setDate(d.getDate() - i);
-    const dateStr = d.toISOString().split("T")[0];
-    const dayData = last7.find((x) => x.date === dateStr);
-    const level = dayData ? (dayData.completed === 0 ? 0 : dayData.completed >= dayData.total ? 3 : dayData.completed >= 1 ? 2 : 1) : 0;
-    heatmap.push({ date: dateStr, level });
-  }
+  const heatmap = last28.map((dayData) => ({
+    date: dayData.date,
+    level:
+      dayData.completed === 0
+        ? 0
+        : dayData.completed >= dayData.total
+          ? 3
+          : dayData.completed >= 1
+            ? 2
+            : 1,
+  }));
 
   const tooltipStyle = {
     background: "hsl(var(--card))",

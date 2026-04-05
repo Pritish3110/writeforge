@@ -1,106 +1,75 @@
+import { useMemo } from "react";
 import { useLocalStorage } from "./useLocalStorage";
-import { DAYS, getDayName } from "@/data/tasks";
 import { useCustomTasks } from "@/hooks/useCustomTasks";
-import { getAllTrackableTasks, getDailyTasksForDay } from "@/lib/customTasks";
-
-export interface TaskRecord {
-  date: string;
-  taskId: string;
-  completed: boolean;
-}
-
-export interface StreakInfo {
-  current: number;
-  longest: number;
-}
-
-const todayStr = () => new Date().toISOString().split("T")[0];
+import {
+  getCategoryStats as buildCategoryStats,
+  getCompletionHistory,
+  getCurrentWeekSummary,
+  getDayCompletionSummary,
+  formatLocalDate,
+  getStreakInfo,
+  getWeekKey,
+  isTaskCompletedForDate,
+  syncTaskRecords,
+  type StreakInfo,
+  type TaskRecord,
+} from "@/lib/taskTracking";
 
 export function useTaskTracking() {
-  const [records, setRecords] = useLocalStorage<TaskRecord[]>("writeforge-tasks", []);
+  const [storedRecords, setStoredRecords] = useLocalStorage<unknown[]>("writeforge-tasks", []);
   const { tasks: customTasks } = useCustomTasks();
+  const records = useMemo(() => syncTaskRecords(storedRecords), [storedRecords]);
 
-  const toggleTask = (taskId: string) => {
-    const date = todayStr();
-    setRecords((prev) => {
-      const idx = prev.findIndex((r) => r.date === date && r.taskId === taskId);
+  const toggleTask = (taskId: string, date: Date = new Date()) => {
+    const weekKey = getWeekKey(date);
+    const completedOn = formatLocalDate(date);
+    setStoredRecords((prev) => {
+      const nextRecords = syncTaskRecords(prev);
+      const idx = nextRecords.findIndex((record) => record.weekKey === weekKey && record.taskId === taskId);
+
       if (idx >= 0) {
-        const copy = [...prev];
-        copy[idx] = { ...copy[idx], completed: !copy[idx].completed };
+        const copy = [...nextRecords];
+        copy[idx] = {
+          ...copy[idx],
+          completed: !copy[idx].completed,
+          completedOn: copy[idx].completed ? null : completedOn,
+        };
         return copy;
       }
-      return [...prev, { date, taskId, completed: true }];
+
+      return [...nextRecords, { weekKey, taskId, completed: true, completedOn }];
     });
   };
 
-  const isCompleted = (taskId: string, date?: string) => {
-    const d = date || todayStr();
-    return records.some((r) => r.date === d && r.taskId === taskId && r.completed);
-  };
+  const isCompleted = (taskId: string, date: Date = new Date()) => isTaskCompletedForDate(records, taskId, date);
 
   const getTodayCompleted = () => {
-    const date = todayStr();
-    const dayTasks = getDailyTasksForDay(getDayName(), customTasks);
-    const completed = dayTasks.filter((t) => isCompleted(t.id, date)).length;
-    return { completed, total: dayTasks.length };
+    const summary = getDayCompletionSummary(records, customTasks);
+    return { completed: summary.completed, total: summary.total };
   };
 
-  const getLast7Days = () => {
-    const result: { date: string; day: string; completed: number; total: number }[] = [];
-    for (let i = 6; i >= 0; i--) {
-      const d = new Date();
-      d.setDate(d.getDate() - i);
-      const dateStr = d.toISOString().split("T")[0];
-      const dayName = DAYS[d.getDay() === 0 ? 6 : d.getDay() - 1];
-      const dayTasks = getDailyTasksForDay(dayName, customTasks);
-      const completed = dayTasks.filter((t) =>
-        records.some((r) => r.date === dateStr && r.taskId === t.id && r.completed)
-      ).length;
-      result.push({ date: dateStr, day: dayName.slice(0, 3), completed, total: dayTasks.length });
-    }
-    return result;
+  const getLast7Days = () => getCompletionHistory(records, customTasks, 7);
+
+  const getLast28Days = () => getCompletionHistory(records, customTasks, 28);
+
+  const getCurrentWeek = () => getCurrentWeekSummary(records, customTasks);
+
+  const getStreak = (): StreakInfo => getStreakInfo(records, customTasks);
+
+  const getCategoryStats = () => buildCategoryStats(records, customTasks);
+
+  const resetAll = () => setStoredRecords([]);
+
+  return {
+    records,
+    toggleTask,
+    isCompleted,
+    getTodayCompleted,
+    getLast7Days,
+    getLast28Days,
+    getCurrentWeek,
+    getStreak,
+    getCategoryStats,
+    resetAll,
   };
-
-  const getStreak = (): StreakInfo => {
-    let current = 0;
-    let longest = 0;
-    let streak = 0;
-    for (let i = 0; i < 365; i++) {
-      const d = new Date();
-      d.setDate(d.getDate() - i);
-      const dateStr = d.toISOString().split("T")[0];
-      const dayName = DAYS[d.getDay() === 0 ? 6 : d.getDay() - 1];
-      const dayTasks = getDailyTasksForDay(dayName, customTasks);
-      const completed = dayTasks.filter((t) =>
-        records.some((r) => r.date === dateStr && r.taskId === t.id && r.completed)
-      ).length;
-      if (completed > 0) {
-        streak++;
-        longest = Math.max(longest, streak);
-        if (i <= 1) current = streak;
-      } else if (i > 0) {
-        streak = 0;
-      }
-    }
-    return { current, longest };
-  };
-
-  const getCategoryStats = () => {
-    const stats: Record<string, number> = {};
-    const taskLookup = new Map(getAllTrackableTasks(customTasks).map((task) => [task.id, task]));
-
-    records.filter((r) => r.completed).forEach((r) => {
-      const task = taskLookup.get(r.taskId);
-
-      if (task) {
-        stats[task.category] = (stats[task.category] || 0) + 1;
-      }
-    });
-
-    return Object.entries(stats).map(([name, value]) => ({ name, value }));
-  };
-
-  const resetAll = () => setRecords([]);
-
-  return { records, toggleTask, isCompleted, getTodayCompleted, getLast7Days, getStreak, getCategoryStats, resetAll };
 }
