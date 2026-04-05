@@ -18,7 +18,7 @@ const WeeklySchedule = () => {
       <div>
         <h1 className="text-3xl font-bold tracking-tight">Weekly Schedule</h1>
         <p className="text-muted-foreground mt-1 font-mono text-sm">
-          Tasks stay checked through Sunday and reset on Monday. Your streak only moves forward when at least one task is checked on its actual day, and it carries through the current day before resetting tomorrow if today stays incomplete.
+          Keep the week moving. Your checked wins stay with you, and each day you show up keeps the streak alive.
         </p>
       </div>
 
@@ -46,7 +46,7 @@ const WeeklySchedule = () => {
           </CardHeader>
           <CardContent>
             <p className="text-3xl font-bold font-mono">{streak.current}</p>
-            <p className="text-xs text-muted-foreground mt-1">grace holds through today, then resets tomorrow if today is missed</p>
+            <p className="text-xs text-muted-foreground mt-1">Keep the rhythm alive today.</p>
           </CardContent>
         </Card>
 
@@ -58,7 +58,7 @@ const WeeklySchedule = () => {
           </CardHeader>
           <CardContent>
             <p className="text-3xl font-bold font-mono">{streak.longest}</p>
-            <p className="text-xs text-muted-foreground mt-1">best consecutive daily streak so far</p>
+            <p className="text-xs text-muted-foreground mt-1">A reminder of the rhythm you built.</p>
           </CardContent>
         </Card>
       </div>
