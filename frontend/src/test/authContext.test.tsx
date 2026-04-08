@@ -17,8 +17,8 @@ interface MockFirebaseUser {
 }
 
 const snapshotServiceMock = vi.hoisted(() => ({
-  deleteSnapshot: vi.fn(async () => {}),
-  saveSnapshot: vi.fn(async (_userId: string, snapshot: unknown) => snapshot),
+  deleteWorkspace: vi.fn(async () => {}),
+  saveWorkspaceData: vi.fn(async (_userId: string, snapshot: unknown) => snapshot),
 }));
 
 const firebaseAuthMock = vi.hoisted(() => {
@@ -93,8 +93,8 @@ vi.mock("@/firebase/auth.js", () => ({
 }));
 
 vi.mock("@/services/snapshotService.js", () => ({
-  deleteSnapshot: snapshotServiceMock.deleteSnapshot,
-  saveSnapshot: snapshotServiceMock.saveSnapshot,
+  deleteWorkspace: snapshotServiceMock.deleteWorkspace,
+  saveWorkspaceData: snapshotServiceMock.saveWorkspaceData,
 }));
 
 const AuthConsumer = () => {
@@ -206,7 +206,7 @@ describe("AuthContext", () => {
       expect(screen.getByTestId("email")).toHaveTextContent(""),
     );
 
-    expect(snapshotServiceMock.deleteSnapshot).toHaveBeenCalledWith(
+    expect(snapshotServiceMock.deleteWorkspace).toHaveBeenCalledWith(
       "firebase-user-001",
     );
   });

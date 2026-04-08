@@ -34,7 +34,7 @@ import {
 } from "@/lib/backend/storageAdapter";
 import { getFallbackDisplayName } from "@/lib/identity";
 import { RESETTABLE_STORAGE_KEYS, STORAGE_KEYS } from "@/lib/storageKeys";
-import { deleteSnapshot, saveSnapshot } from "@/services/snapshotService.js";
+import { deleteWorkspace, saveWorkspaceData } from "@/services/snapshotService.js";
 
 export type PendingAuthAction =
   | "session-check"
@@ -449,15 +449,15 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
     setPendingAuthAction("delete-account");
 
     try {
-      await deleteSnapshot(userId);
+      await deleteWorkspace(userId);
 
       try {
         await deleteCurrentUser();
       } catch (error) {
         try {
-          await saveSnapshot(userId, snapshotBackup);
+          await saveWorkspaceData(userId, snapshotBackup);
         } catch (restoreError) {
-          console.error("Unable to restore the workspace snapshot after delete failure.", restoreError);
+          console.error("Unable to restore the workspace data after delete failure.", restoreError);
         }
 
         throw error;

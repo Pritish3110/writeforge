@@ -15,11 +15,22 @@ import { useAuth } from "@/contexts/AuthContext";
 import { subscribeToStorage } from "@/lib/backend/storageAdapter";
 import {
   createEmptyWorkspaceSnapshot,
+  getWorkspaceSyncTargetForStorageKey,
   hydrateWorkspaceSnapshot,
   readStoredBackendUser,
+  readWorkspaceCollection,
   readWorkspaceSnapshot,
+  readWorkspaceUser,
+  WORKSPACE_COLLECTION_KEYS,
+  type WorkspaceCollectionKey,
+  type WorkspaceSnapshot,
 } from "@/lib/backend/workspaceSnapshot";
-import { getSnapshot, saveSnapshot } from "@/services/snapshotService.js";
+import {
+  getSnapshot,
+  saveWorkspaceData,
+  saveWorkspaceUser,
+  syncWorkspaceCollection,
+} from "@/services/snapshotService.js";
 
 type BackendSyncStatus =
   | "disabled"
@@ -27,6 +38,8 @@ type BackendSyncStatus =
   | "ready"
   | "syncing"
   | "error";
+
+type WorkspaceSyncTarget = "user" | WorkspaceCollectionKey;
 
 interface BackendSyncContextValue {
   enabled: boolean;
@@ -43,6 +56,26 @@ const BackendSyncContext = createContext<BackendSyncContextValue>({
 });
 
 const SYNC_DEBOUNCE_MS = 3000;
+const ALL_WORKSPACE_SYNC_TARGETS: WorkspaceSyncTarget[] = [
+  "user",
+  ...WORKSPACE_COLLECTION_KEYS,
+];
+
+const areSerializedValuesEqual = (left: unknown, right: unknown) =>
+  JSON.stringify(left) === JSON.stringify(right);
+
+const cloneWorkspaceSnapshot = (
+  snapshot: WorkspaceSnapshot,
+): WorkspaceSnapshot => {
+  const clonedSnapshot = createEmptyWorkspaceSnapshot(snapshot.user?.id || "");
+  clonedSnapshot.user = snapshot.user ? { ...snapshot.user } : null;
+
+  WORKSPACE_COLLECTION_KEYS.forEach((key) => {
+    clonedSnapshot[key] = Array.isArray(snapshot[key]) ? [...snapshot[key]] : [];
+  });
+
+  return clonedSnapshot;
+};
 
 export const useBackendSync = () => useContext(BackendSyncContext);
 
@@ -55,12 +88,14 @@ export const BackendSyncProvider = ({ children }: { children: ReactNode }) => {
   );
   const [lastSyncedAt, setLastSyncedAt] = useState<string | null>(null);
   const [bootResolved, setBootResolved] = useState(!enabled);
-  const lastSnapshotRef = useRef<string>("");
   const syncInFlightRef = useRef(false);
   const pendingSyncTimeoutRef = useRef<number | null>(null);
-  const queuedSyncRef = useRef(false);
+  const pendingTargetsRef = useRef<Set<WorkspaceSyncTarget>>(new Set());
   const hydratingSnapshotRef = useRef(false);
-  const scheduleSyncRef = useRef<(delay?: number) => void>(() => {});
+  const lastSyncedWorkspaceRef = useRef<WorkspaceSnapshot | null>(null);
+  const scheduleSyncRef = useRef(
+    (_targets?: Iterable<WorkspaceSyncTarget>, _delay?: number) => {},
+  );
 
   const clearPendingSync = useCallback(() => {
     if (pendingSyncTimeoutRef.current !== null) {
@@ -69,58 +104,155 @@ export const BackendSyncProvider = ({ children }: { children: ReactNode }) => {
     }
   }, []);
 
-  const syncNow = useCallback(async () => {
-    clearPendingSync();
+  const normalizeTargets = useCallback(
+    (targets?: Iterable<WorkspaceSyncTarget>) =>
+      Array.from(new Set(targets ? Array.from(targets) : ALL_WORKSPACE_SYNC_TARGETS)),
+    [],
+  );
 
-    if (!enabled || !userId) return;
+  const getLastSyncedWorkspace = useCallback(
+    () => lastSyncedWorkspaceRef.current || createEmptyWorkspaceSnapshot(userId),
+    [userId],
+  );
 
-    if (syncInFlightRef.current) {
-      queuedSyncRef.current = true;
-      return;
-    }
+  const readLocalTargetValue = useCallback(
+    (target: WorkspaceSyncTarget) =>
+      target === "user"
+        ? readWorkspaceUser(userId)
+        : readWorkspaceCollection(target),
+    [userId],
+  );
 
-    syncInFlightRef.current = true;
-    setStatus("syncing");
+  const updateLastSyncedTarget = useCallback(
+    (target: WorkspaceSyncTarget, value: unknown) => {
+      const currentSnapshot =
+        lastSyncedWorkspaceRef.current || createEmptyWorkspaceSnapshot(userId);
 
-    try {
-      const snapshot = readWorkspaceSnapshot(userId);
-      const savedSnapshot = await saveSnapshot(userId, snapshot);
-      hydratingSnapshotRef.current = true;
-      hydrateWorkspaceSnapshot(savedSnapshot);
-      lastSnapshotRef.current = JSON.stringify(readWorkspaceSnapshot(userId));
-      setLastSyncedAt(new Date().toISOString());
-      setStatus("ready");
-    } catch (error) {
-      setStatus("error");
-      console.error("Workspace sync failed.", error);
-      throw error;
-    } finally {
-      hydratingSnapshotRef.current = false;
-      syncInFlightRef.current = false;
-
-      if (
-        queuedSyncRef.current ||
-        (enabled &&
-          userId &&
-          JSON.stringify(readWorkspaceSnapshot(userId)) !== lastSnapshotRef.current)
-      ) {
-        queuedSyncRef.current = false;
-        scheduleSyncRef.current();
+      if (target === "user") {
+        currentSnapshot.user = value as WorkspaceSnapshot["user"];
+      } else {
+        currentSnapshot[target] = Array.isArray(value) ? value : [];
       }
-    }
-  }, [clearPendingSync, enabled, userId]);
+
+      lastSyncedWorkspaceRef.current = currentSnapshot;
+    },
+    [userId],
+  );
+
+  const syncTargets = useCallback(
+    async (targets?: Iterable<WorkspaceSyncTarget>) => {
+      clearPendingSync();
+
+      if (!enabled || !userId) return;
+
+      const resolvedTargets = normalizeTargets(targets);
+
+      if (!resolvedTargets.length) {
+        return;
+      }
+
+      if (syncInFlightRef.current) {
+        resolvedTargets.forEach((target) => pendingTargetsRef.current.add(target));
+        return;
+      }
+
+      syncInFlightRef.current = true;
+      setStatus("syncing");
+
+      try {
+        let savedAnyTarget = false;
+
+        for (const target of resolvedTargets) {
+          const currentValue = readLocalTargetValue(target);
+          const previousSnapshot = getLastSyncedWorkspace();
+          const previousValue =
+            target === "user" ? previousSnapshot.user : previousSnapshot[target];
+
+          if (areSerializedValuesEqual(currentValue, previousValue)) {
+            continue;
+          }
+
+          if (target === "user") {
+            const savedUser = await saveWorkspaceUser(
+              userId,
+              currentValue as WorkspaceSnapshot["user"],
+            );
+            updateLastSyncedTarget(target, savedUser);
+          } else {
+            const savedCollection = await syncWorkspaceCollection(
+              userId,
+              target,
+              currentValue as unknown[],
+              Array.isArray(previousValue) ? previousValue : [],
+            );
+            updateLastSyncedTarget(target, savedCollection);
+          }
+
+          savedAnyTarget = true;
+        }
+
+        if (savedAnyTarget) {
+          setLastSyncedAt(new Date().toISOString());
+        }
+
+        setStatus("ready");
+      } catch (error) {
+        setStatus("error");
+        console.error("Workspace sync failed.", error);
+        throw error;
+      } finally {
+        syncInFlightRef.current = false;
+
+        if (pendingTargetsRef.current.size > 0) {
+          const pendingTargets = Array.from(pendingTargetsRef.current);
+          pendingTargetsRef.current.clear();
+          scheduleSyncRef.current(pendingTargets, 0);
+        }
+      }
+    },
+    [
+      clearPendingSync,
+      enabled,
+      getLastSyncedWorkspace,
+      normalizeTargets,
+      readLocalTargetValue,
+      updateLastSyncedTarget,
+      userId,
+    ],
+  );
+
+  const syncNow = useCallback(
+    async () => syncTargets(ALL_WORKSPACE_SYNC_TARGETS),
+    [syncTargets],
+  );
 
   const scheduleSync = useCallback(
-    (delay = SYNC_DEBOUNCE_MS) => {
+    (
+      targets: Iterable<WorkspaceSyncTarget> = ALL_WORKSPACE_SYNC_TARGETS,
+      delay = SYNC_DEBOUNCE_MS,
+    ) => {
       if (!enabled || !userId || !bootResolved) return;
+
+      normalizeTargets(targets).forEach((target) =>
+        pendingTargetsRef.current.add(target),
+      );
 
       clearPendingSync();
       pendingSyncTimeoutRef.current = window.setTimeout(() => {
         pendingSyncTimeoutRef.current = null;
-        void syncNow();
+        const pendingTargets = Array.from(pendingTargetsRef.current);
+        pendingTargetsRef.current.clear();
+        void syncTargets(pendingTargets);
       }, delay);
     },
-    [bootResolved, clearPendingSync, enabled, syncNow, userId],
+    [
+      bootResolved,
+      clearPendingSync,
+      enabled,
+      normalizeTargets,
+      syncTargets,
+      userId,
+    ],
   );
 
   useEffect(() => {
@@ -130,9 +262,9 @@ export const BackendSyncProvider = ({ children }: { children: ReactNode }) => {
   useEffect(() => {
     setStatus(enabled ? "booting" : "disabled");
     setBootResolved(!enabled);
-    lastSnapshotRef.current = "";
-    queuedSyncRef.current = false;
     hydratingSnapshotRef.current = false;
+    lastSyncedWorkspaceRef.current = null;
+    pendingTargetsRef.current.clear();
     clearPendingSync();
   }, [clearPendingSync, enabled, userId]);
 
@@ -151,28 +283,28 @@ export const BackendSyncProvider = ({ children }: { children: ReactNode }) => {
       try {
         const remoteSnapshot = await getSnapshot(userId);
         const snapshot = remoteSnapshot || fallbackSnapshot;
-
-        if (!remoteSnapshot) {
-          await saveSnapshot(userId, snapshot);
-        }
+        const savedSnapshot = remoteSnapshot
+          ? snapshot
+          : await saveWorkspaceData(userId, snapshot);
 
         if (!active) return;
 
         hydratingSnapshotRef.current = true;
-        hydrateWorkspaceSnapshot(snapshot);
-        lastSnapshotRef.current = JSON.stringify(readWorkspaceSnapshot(userId));
+        hydrateWorkspaceSnapshot(savedSnapshot);
+        lastSyncedWorkspaceRef.current = cloneWorkspaceSnapshot(savedSnapshot);
         setLastSyncedAt(new Date().toISOString());
         setStatus("ready");
       } catch (error) {
         if (!active) return;
 
-        console.error("Unable to load the saved workspace snapshot.", error);
+        console.error("Unable to load the saved workspace data.", error);
         hydratingSnapshotRef.current = true;
         hydrateWorkspaceSnapshot(fallbackSnapshot);
-        lastSnapshotRef.current = JSON.stringify(readWorkspaceSnapshot(userId));
+        lastSyncedWorkspaceRef.current = cloneWorkspaceSnapshot(fallbackSnapshot);
         setStatus("error");
       } finally {
         hydratingSnapshotRef.current = false;
+
         if (active) {
           setBootResolved(true);
         }
@@ -189,18 +321,18 @@ export const BackendSyncProvider = ({ children }: { children: ReactNode }) => {
   useEffect(() => {
     if (!enabled || !userId || !bootResolved) return;
 
-    return subscribeToStorage(() => {
+    return subscribeToStorage((changedKey) => {
       if (hydratingSnapshotRef.current) {
         return;
       }
 
-      const currentSignature = JSON.stringify(readWorkspaceSnapshot(userId));
+      const target = getWorkspaceSyncTargetForStorageKey(changedKey);
 
-      if (currentSignature === lastSnapshotRef.current) {
+      if (!target) {
         return;
       }
 
-      scheduleSync();
+      scheduleSync([target]);
     });
   }, [bootResolved, enabled, scheduleSync, userId]);
 

@@ -33,6 +33,77 @@ export interface WorkspaceSnapshot {
   knowledgeBaseSections: unknown[];
 }
 
+export type WorkspaceCollectionKey = Exclude<keyof WorkspaceSnapshot, "user">;
+
+export const WORKSPACE_COLLECTIONS = [
+  {
+    snapshotKey: "taskRecords",
+    storageKey: STORAGE_KEYS.tasks,
+    collectionName: "taskRecords",
+  },
+  {
+    snapshotKey: "customTasks",
+    storageKey: STORAGE_KEYS.customTasks,
+    collectionName: "customTasks",
+  },
+  {
+    snapshotKey: "taskTemplates",
+    storageKey: STORAGE_KEYS.taskTemplates,
+    collectionName: "taskTemplates",
+  },
+  {
+    snapshotKey: "characters",
+    storageKey: STORAGE_KEYS.characters,
+    collectionName: "characters",
+  },
+  {
+    snapshotKey: "characterRelationships",
+    storageKey: STORAGE_KEYS.characterRelationships,
+    collectionName: "characterRelationships",
+  },
+  {
+    snapshotKey: "plotPoints",
+    storageKey: STORAGE_KEYS.plotBuilder,
+    collectionName: "plotPoints",
+  },
+  {
+    snapshotKey: "drafts",
+    storageKey: STORAGE_KEYS.drafts,
+    collectionName: "drafts",
+  },
+  {
+    snapshotKey: "worldElements",
+    storageKey: STORAGE_KEYS.worldElements,
+    collectionName: "worldElements",
+  },
+  {
+    snapshotKey: "knowledgeBaseSections",
+    storageKey: STORAGE_KEYS.knowledgeBase,
+    collectionName: "knowledgeBaseSections",
+  },
+] as const satisfies ReadonlyArray<{
+  snapshotKey: WorkspaceCollectionKey;
+  storageKey: string;
+  collectionName: string;
+}>;
+
+export const WORKSPACE_COLLECTION_KEYS = WORKSPACE_COLLECTIONS.map(
+  ({ snapshotKey }) => snapshotKey,
+) as WorkspaceCollectionKey[];
+
+export const WORKSPACE_USER_STORAGE_KEYS = [
+  STORAGE_KEYS.backendUser,
+  STORAGE_KEYS.theme,
+  STORAGE_KEYS.characterSeedVersion,
+] as const;
+
+const WORKSPACE_COLLECTION_LOOKUP = Object.fromEntries(
+  WORKSPACE_COLLECTIONS.map((config) => [config.snapshotKey, config]),
+) as Record<
+  WorkspaceCollectionKey,
+  (typeof WORKSPACE_COLLECTIONS)[number]
+>;
+
 const parseStoredValue = <T,>(key: string, fallback: T): T => {
   return readStoredJsonValue(key, fallback);
 };
@@ -94,6 +165,39 @@ const buildWorkspaceUser = (userId: string): BackendWorkspaceUser => {
   };
 };
 
+export const readWorkspaceUser = (userId: string): BackendWorkspaceUser =>
+  buildWorkspaceUser(userId);
+
+export const readWorkspaceCollection = (
+  snapshotKey: WorkspaceCollectionKey,
+): unknown[] =>
+  parseStoredValue(WORKSPACE_COLLECTION_LOOKUP[snapshotKey].storageKey, []);
+
+export const writeWorkspaceCollection = (
+  snapshotKey: WorkspaceCollectionKey,
+  value: unknown[],
+) => {
+  writeStoredValue(WORKSPACE_COLLECTION_LOOKUP[snapshotKey].storageKey, value);
+};
+
+export const getWorkspaceSyncTargetForStorageKey = (
+  key: string,
+): WorkspaceCollectionKey | "user" | null => {
+  if (
+    WORKSPACE_USER_STORAGE_KEYS.includes(
+      key as (typeof WORKSPACE_USER_STORAGE_KEYS)[number],
+    )
+  ) {
+    return "user";
+  }
+
+  const config = WORKSPACE_COLLECTIONS.find(
+    (entry) => entry.storageKey === key,
+  );
+
+  return config?.snapshotKey || null;
+};
+
 export const createEmptyWorkspaceSnapshot = (userId: string): WorkspaceSnapshot => ({
   user: buildWorkspaceUser(userId),
   taskRecords: [],
@@ -108,18 +212,14 @@ export const createEmptyWorkspaceSnapshot = (userId: string): WorkspaceSnapshot 
 });
 
 export const readWorkspaceSnapshot = (userId: string): WorkspaceSnapshot => {
-  return {
-    user: buildWorkspaceUser(userId),
-    taskRecords: parseStoredValue(STORAGE_KEYS.tasks, []),
-    customTasks: parseStoredValue(STORAGE_KEYS.customTasks, []),
-    taskTemplates: parseStoredValue(STORAGE_KEYS.taskTemplates, []),
-    characters: parseStoredValue(STORAGE_KEYS.characters, []),
-    characterRelationships: parseStoredValue(STORAGE_KEYS.characterRelationships, []),
-    plotPoints: parseStoredValue(STORAGE_KEYS.plotBuilder, []),
-    drafts: parseStoredValue(STORAGE_KEYS.drafts, []),
-    worldElements: parseStoredValue(STORAGE_KEYS.worldElements, []),
-    knowledgeBaseSections: parseStoredValue(STORAGE_KEYS.knowledgeBase, []),
-  };
+  const snapshot = createEmptyWorkspaceSnapshot(userId);
+  snapshot.user = buildWorkspaceUser(userId);
+
+  WORKSPACE_COLLECTIONS.forEach(({ snapshotKey }) => {
+    snapshot[snapshotKey] = readWorkspaceCollection(snapshotKey);
+  });
+
+  return snapshot;
 };
 
 export const hydrateWorkspaceSnapshot = (snapshot: WorkspaceSnapshot) => {
@@ -132,21 +232,9 @@ export const hydrateWorkspaceSnapshot = (snapshot: WorkspaceSnapshot) => {
     );
   }
 
-  writeStoredValue(STORAGE_KEYS.tasks, snapshot.taskRecords || []);
-  writeStoredValue(STORAGE_KEYS.customTasks, snapshot.customTasks || []);
-  writeStoredValue(STORAGE_KEYS.taskTemplates, snapshot.taskTemplates || []);
-  writeStoredValue(STORAGE_KEYS.characters, snapshot.characters || []);
-  writeStoredValue(
-    STORAGE_KEYS.characterRelationships,
-    snapshot.characterRelationships || [],
-  );
-  writeStoredValue(STORAGE_KEYS.plotBuilder, snapshot.plotPoints || []);
-  writeStoredValue(STORAGE_KEYS.drafts, snapshot.drafts || []);
-  writeStoredValue(STORAGE_KEYS.worldElements, snapshot.worldElements || []);
-  writeStoredValue(
-    STORAGE_KEYS.knowledgeBase,
-    snapshot.knowledgeBaseSections || [],
-  );
+  WORKSPACE_COLLECTIONS.forEach(({ snapshotKey }) => {
+    writeWorkspaceCollection(snapshotKey, snapshot[snapshotKey] || []);
+  });
 };
 
 export const clearStoredBackendUser = () => {
