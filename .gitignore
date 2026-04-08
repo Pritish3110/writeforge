@@ -40,3 +40,6 @@ build/
 
 # system
 .DS_Store
+
+*.md
+!README.md
