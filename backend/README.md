@@ -55,10 +55,12 @@ npm run dev
 
 ## Deploy
 
-- Railway or Render are the intended free-tier-friendly targets
+- Render is the current target platform
 - Use `npm start`
-- Set `PORT` from the platform
+- Do not manually set `PORT` on Render unless needed for a special case
 - Add `FRONTEND_URL`, `GEMINI_API_KEY`, and Firebase service account credentials in environment variables
+- Set `FRONTEND_URL` to your deployed Vercel domain, for example `https://your-app.vercel.app`
+- UptimeRobot can ping `/health`
 
 ## Firebase Scope
 
