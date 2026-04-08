@@ -45,3 +45,5 @@ build/
 !README.md
 
 sample_frontend/
+
+.codex
