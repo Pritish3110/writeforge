@@ -44,4 +44,4 @@ build/
 *.md
 !README.md
 
-../sample_frontend/
+sample_frontend/
