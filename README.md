@@ -1,448 +1,469 @@
-# WriteForge
+# ✍️ WriterZ
 
-WriteForge is a dark, neon-accented writing dashboard for structured creative practice. It combines daily writing drills, progress tracking, a character system, a lightweight knowledge base, and freeform scene drafting in a single local-first React app.
+> A **cloud-native writing workspace** for creative writers who need more than a blank page.
 
-## Stack
+**Status:** Production Ready | **License:** MIT  
+**GitHub:** https://github.com/Pritish3110/WriterZ
 
-- Vite 5
-- React 18
-- TypeScript
-- Tailwind CSS
-- shadcn/ui + Radix primitives
-- Framer Motion
-- Recharts for analytics
-- localStorage for persistence
-- Vitest and Playwright config present for testing
+---
 
-## Run Commands
+## 🎯 What is WriterZ?
+
+WriterZ is an integrated suite of tools designed to help writers at every stage of the creative process:
+
+| Feature | Purpose |
+|---------|---------|
+| 🎭 **Character Lab** | Build rich character profiles with personality, motivations, and contradictions |
+| 🔗 **Relationships** | Visualize character dynamics with an interactive graph |
+| 🌍 **World Builder** | Document locations, factions, magic systems, and lore |
+| 📖 **Plot Builder** | Structure stories using three-act framework (Promise → Progress → Payoff) |
+| 📝 **Scene Practice** | Write with AI-powered prompts and track progress |
+| ✅ **Daily Tasks** | Structured writing exercises with timers and feedback |
+| 📊 **Analytics** | Track word counts, streaks, and writing patterns |
+| 🤖 **AI Assistant** | Gemini-powered suggestions (secure backend API) |
+
+---
+
+## 🏗️ Architecture
+
+### Tech Stack
+
+| Layer | Technology | Purpose |
+|-------|-----------|---------|
+| **Frontend** | React 18 + Vite + TypeScript | Fast, modern UI |
+| **Styling** | Tailwind CSS + shadcn/ui | Consistent, accessible design |
+| **State** | Context API | Global auth, theme, data sync |
+| **Backend** | Firebase + Firestore | Real-time database & auth |
+| **Functions** | Cloud Functions (Node 20) | Secure API calls, AI integration |
+| **Testing** | Vitest + Playwright | Unit & E2E testing |
+
+### Infrastructure
+
+```
+┌─────────────────────────────────────┐
+│        Frontend (React)              │
+│  • React 18 + Vite                  │
+│  • TypeScript                       │
+│  • Tailwind CSS + shadcn/ui        │
+│  • Firebase SDK                    │
+└──────────────┬──────────────────────┘
+               │
+       ┌───────┴────────┐
+       ▼                ▼
+┌──────────────┐  ┌──────────────┐
+│  Firebase    │  │ Cloud        │
+│  Auth        │  │ Functions    │
+│              │  │              │
+└──────────────┘  └────────┬─────┘
+       ▲                   │
+       └───────┬───────────┘
+               ▼
+        ┌──────────────┐
+        │  Firestore   │
+        │  (Real-time) │
+        └──────────────┘
+```
+
+---
+
+## ⚡ Quick Start
+
+### Prerequisites
+
+- **Node.js** 18+ 
+- **npm** or **bun**
+- Firebase project (free: https://firebase.google.com)
+- Gemini API key (optional, for AI features)
+
+### 1. Clone & Install
 
 ```bash
+git clone https://github.com/Pritish3110/WriterZ.git
+cd WriterZ
+```
+
+### 2. Frontend Setup
+
+```bash
+cd frontend
 npm install
+```
+
+Create `frontend/.env.local` (optional):
+```env
+# Frontend env overrides (defaults in src/firebase/config.js)
+```
+
+### 3. Backend Setup (Optional for AI)
+
+```bash
+cd ../backend/functions
+npm install
+```
+
+Create `backend/functions/.env`:
+```env
+GEMINI_API_KEY=your_key_here
+```
+
+### 4. Run Development Server
+
+```bash
+# Terminal 1: Frontend
+cd frontend
 npm run dev
-npm run build
-npm run test
+# → http://localhost:5173
+
+# Terminal 2: Backend (optional)
+cd backend
+npm run dev:functions
+# → Emulator UI: http://localhost:4000
+# → Functions: http://localhost:5001
 ```
 
-## Product Overview
+---
 
-WriteForge is organized around a weekly writing-training loop:
+## 📁 Project Structure
 
-- `Dashboard` shows today’s progress, streak, and seven-day activity.
-- `Daily Tasks` contains the main training system with day-specific drills and timers.
-- `Weekly Schedule` gives a week-at-a-glance progress view.
-- `Analytics` summarizes streaks, categories, charts, and a simple activity heatmap.
-- `Writing Analytics` analyzes saved writing sessions for word trends, consistency, and style heuristics.
-- `Knowledge Base` acts like a small personal writing wiki.
-- `Character Lab` stores, edits, reads, filters, pins, and reorders structured character profiles.
-- `Character Relationships` visualizes cast dynamics with an interactive relationship graph.
-- `Plot Builder` structures story beats into Promise, Progress, and Payoff with a board-plus-context workflow.
-- `Scene Practice` is a freeform writing area with prompts, saved drafts, and export tools.
-- `Custom Task Builder` lets users create, preview, save, duplicate, edit, and assign their own exercises to the week.
-- `Settings` toggles theme and resets core progress data.
-- `Upcoming Features` is a smaller roadmap screen that now excludes already shipped features.
-
-## Current Key Features
-
-### Daily Tasks
-
-- Fully custom Monday-Sunday training data lives in `src/data/tasks.ts`.
-- Every task has:
-  - `prompt`
-  - `steps`
-  - `durationMinutes`
-  - `importantRules`
-  - `writingPrinciples`
-  - `review`
-- Monday-Sunday have already been rewritten into unique task logic with a strict training flow.
-- Saturday tasks also contain optional `knowledgeTemplate` metadata for future writing-wiki expansion.
-- Task cards use collapsible sections and smooth shared dropdown animation.
-- User-created custom tasks assigned to a day now appear alongside the built-in Daily Tasks flow.
-
-### Custom Task Builder
-
-- Main route: `/custom-task-builder`
-- Users can create custom writing drills with:
-  - title
-  - category
-  - duration
-  - prompt
-  - drag-reorderable steps
-  - toggleable important-rule bullets
-  - day assignment
-  - template flag
-- Task cards support:
-  - edit
-  - duplicate
-  - delete
-  - preview mode
-  - category color tagging
-- An `Improve Prompt` button exists as an AI-assist placeholder with mock rewrite logic.
-- Custom tasks are stored locally and feed into:
-  - `Daily Tasks`
-  - `Weekly Schedule`
-  - dashboard totals
-  - analytics category stats
-
-### Character Lab
-
-- Characters support:
-  - required `Character Type`
-  - structured narrative fields
-  - dynamic personality trait blocks
-  - dynamic contradiction blocks
-  - theme split into lie-based and truth-based fields
-- Default seeded characters:
-  - `Kael`
-  - `luna`
-- `Kael` contains exact preloaded character architecture content.
-- `luna` is currently a second seeded card that duplicates Kael’s full content for multi-card testing.
-- Character cards now support:
-  - search
-  - type filtering
-  - pin/unpin
-  - move-to-top
-  - drag-to-reorder via grip handle
-  - separate edit action
-  - separate read/view mode
-- Full character viewing is no longer tied to edit mode.
-- Multiple characters are handled with a dedicated reader panel below the card grid instead of inline expansion inside the grid.
-- Reader subsections are collapsible and default closed.
-
-### Character Relationships
-
-- Main route: `/character-relationships`
-- Uses Character Lab data as graph nodes and local relationship records as edges.
-- Includes:
-  - draggable character nodes
-  - zoomable relationship graph
-  - click-to-view mini profile
-  - relationship type color coding
-  - add relationship form
-  - strength slider
-  - timeline/evolution entries
-- Supported relationship types:
-  - `Ally`
-  - `Enemy`
-  - `Mentor`
-  - `Family`
-  - `Unknown`
-
-### Plot Builder
-
-- Main route: `/plot-builder`
-- Uses a three-column board:
-  - `Promise`
-  - `Progress`
-  - `Payoff`
-- Uses a wider board plus contextual detail panel flow instead of a stacked planning form.
-- Plot points support:
-  - title
-  - description
-  - characters involved
-  - stakes
-  - conflict level
-  - linked scenes
-  - foreshadowing links
-- Editing flow includes:
-  - create from the page header or a phase column
-  - click a plot card to open its detail editor
-  - edit in the right-side context panel on desktop or a drawer on mobile
-- Current stability note:
-  - the page is running in a safe mode while the route is being stabilized
-  - drag-and-drop reordering is temporarily paused
-- Context panel surfaces:
-  - conflict distribution
-  - character usage
-  - foreshadowing overview
-  - full selected-beat editor
-
-### Character Data Shape
-
-Character data is stored in browser storage and normalized into this structure:
-
-```ts
-type Character = {
-  id: string;
-  name: string;
-  type: "Main Character" | "Side Character" | "Activity Character" | "";
-  logline: string;
-  ghost: string;
-  lie: string;
-  want: string;
-  need: string;
-  truth: string;
-  designing_principle: string;
-  moral_problem: string;
-  worthy_cause: string;
-  personality_traits: Array<{
-    title: string;
-    description: string;
-  }>;
-  theme: {
-    lie_based: string;
-    truth_based: string;
-  };
-  contradictions: Array<{
-    left: string;
-    right: string;
-    description: string;
-  }>;
-  pinned: boolean;
-  order: number;
-};
 ```
-
-### Knowledge Base
-
-- Local editable rule cards with accordion behavior.
-- Default sections include:
-  - core writing rules
-  - scene rules
-  - pyramid of abstraction
-  - emotion rules
-  - dialogue rules
-
-### Scene Practice
-
-- Uses a smart prompt engine with tone, character, and story-phase filters.
-- Pulls character options from Character Lab storage when available.
-- Generates combinator-based prompts from `src/data/promptEngine.ts` by mixing templates, conflicts, locations, and twists.
-- Avoids repeating the same full prompt until the history resets after 100 generated combinations.
-- Auto-generates an editable scene title from prompt building blocks when the title field is empty.
-- Tracks live word count.
-- Saves drafts locally with timestamp and word count.
-- Exports the current writing session as:
-  - PDF
-  - Google Docs-ready `.docx`
-
-### Analytics and Tracking
-
-- Task completion records are stored by date and task id.
-- Dashboard and analytics derive:
-  - today completion
-  - weekly totals
-  - streaks
-  - category stats
-  - seven-day chart data
-  - simple 28-day heatmap
-
-### Writing Analytics
-
-- Main route: `/writing-analytics`
-- Powered by saved drafts from `Scene Practice` local storage.
-- Includes:
-  - total words written
-  - sessions completed
-  - estimated average session length
-  - words-per-day chart
-  - session consistency heatmap
-  - writing streak tracking
-  - average sentence length
-  - dialogue vs narration ratio
-  - most-used words cloud
-  - repetition detection
-  - clarity score heuristic
-  - over-description detection
-  - action density
-- Tab layout:
-  - `Overview`
-  - `Style Analysis`
-  - `Progress`
-
-### Theme and Branding
-
-- Title is `WriteForge`.
-- Favicon uses the PenTool logo via `public/favicon.svg`.
-- Dark and light themes are supported through `ThemeContext`.
-- App startup includes a centered Framer Motion loading screen built around a neon hexagon SVG with `WF`.
-- The visual system intentionally stays consistent across pages:
-  - dark surfaces
-  - purple/cyan/pink neon accents
-  - glow borders
-  - mono labels
-  - card-based layout
-
-## Folder Structure
-
-```text
-retroflow-writer/
-├── index.html
-├── package.json
-├── tailwind.config.ts
-├── vite.config.ts
-├── tsconfig.json
-├── eslint.config.js
-├── postcss.config.js
-├── vitest.config.ts
-├── playwright.config.ts
+WriterZ/
 ├── README.md
-├── MEMORY.md
-├── public/
-│   ├── favicon.svg
-│   ├── favicon.ico
-│   ├── placeholder.svg
-│   └── robots.txt
-├── src/
-│   ├── App.tsx
-│   ├── main.tsx
-│   ├── index.css
-│   ├── App.css
-│   ├── vite-env.d.ts
-│   ├── components/
-│   │   ├── AppLayout.tsx
-│   │   ├── AppSidebar.tsx
-│   │   ├── NavLink.tsx
-│   │   └── ui/
-│   │       ├── shadcn/Radix primitives used across the app
-│   │       ├── button.tsx
-│   │       ├── card.tsx
-│   │       ├── collapsible.tsx
-│   │       ├── input.tsx
-│   │       ├── label.tsx
-│   │       ├── progress.tsx
-│   │       ├── select.tsx
-│   │       ├── sidebar.tsx
-│   │       ├── textarea.tsx
-│   │       └── many additional generated primitives
-│   ├── contexts/
-│   │   └── ThemeContext.tsx
-│   ├── data/
-│   │   ├── promptEngine.ts
-│   │   └── tasks.ts
-│   ├── hooks/
-│   │   ├── useLocalStorage.ts
-│   │   ├── useCustomTasks.ts
-│   │   ├── useTaskTracking.ts
-│   │   ├── use-mobile.tsx
-│   │   └── use-toast.ts
-│   ├── lib/
-│   │   ├── characterRelationships.ts
-│   │   ├── plotBuilder.ts
-│   │   ├── writingAnalytics.ts
-│   │   ├── customTasks.ts
-│   │   └── utils.ts
-│   ├── pages/
-│   │   ├── Analytics.tsx
-│   │   ├── CharacterLab.tsx
-│   │   ├── CharacterRelationships.tsx
-│   │   ├── CustomTaskBuilder.tsx
-│   │   ├── DailyTasks.tsx
-│   │   ├── Dashboard.tsx
-│   │   ├── KnowledgeBase.tsx
-│   │   ├── NotFound.tsx
-│   │   ├── PlotBuilder.tsx
-│   │   ├── ScenePractice.tsx
-│   │   ├── SettingsPage.tsx
-│   │   ├── UpcomingFeatures.tsx
-│   │   ├── WeeklySchedule.tsx
-│   │   └── WritingAnalytics.tsx
-│   └── test/
-│       ├── example.test.ts
-│       └── setup.ts
-├── bun.lock
-├── bun.lockb
-└── playwright-fixture.ts
+├── .gitignore                       # Security rules
+│
+├── frontend/                        # React + Vite app
+│   ├── src/
+│   │   ├── pages/
+│   │   │   ├── Dashboard.tsx       # Progress overview
+│   │   │   ├── DailyTasks.tsx      # Daily exercises
+│   │   │   ├── CharacterLab.tsx    # Character management
+│   │   │   ├── CharacterRelationships.tsx
+│   │   │   ├── PlotBuilder.tsx     # Story structure
+│   │   │   ├── WorldElementDesignerPage.tsx
+│   │   │   ├── ScenePractice.tsx   # Freeform writing
+│   │   │   ├── CustomTaskBuilder.tsx
+│   │   │   ├── Analytics.tsx
+│   │   │   ├── WritingAnalytics.tsx
+│   │   │   ├── KnowledgeBase.tsx
+│   │   │   ├── SettingsPage.tsx
+│   │   │   ├── AuthPage.tsx
+│   │   │   └── UpcomingFeatures.tsx
+│   │   ├── components/
+│   │   │   ├── ui/                 # shadcn/ui components
+│   │   │   ├── auth/               # Auth flows
+│   │   │   ├── ai/                 # AI assistant UI
+│   │   │   ├── tasks/              # Task components
+│   │   │   └── ...
+│   │   ├── contexts/               # Global state
+│   │   │   ├── AuthContext.tsx
+│   │   │   ├── ThemeContext.tsx
+│   │   │   ├── BackendSyncContext.tsx
+│   │   │   └── AiAssistantContext.tsx
+│   │   ├── services/               # API clients
+│   │   │   └── backendAiClient.ts  # Calls backend AI
+│   │   ├── firebase/               # Firebase config
+│   │   ├── ai/                     # AI utilities
+│   │   │   ├── modelManager.js     # Backend calls
+│   │   │   ├── aiRouter.js         # Intent detection
+│   │   │   └── llmService.js
+│   │   ├── hooks/                  # Custom hooks
+│   │   ├── lib/                    # Utilities
+│   │   ├── data/                   # Static data
+│   │   └── index.css               # Global styles
+│   └── package.json
+│
+├── backend/
+│   ├── functions/                  # Cloud Functions
+│   │   ├── src/
+│   │   │   └── index.js            # generateText(), healthCheck()
+│   │   ├── .env.example
+│   │   └── package.json
+│   ├── database/                   # Firestore schema
+│   ├── firebase/                   # Config & rules
+│   │   ├── firestore.rules         # Security rules
+│   │   └── firestore.indexes.json
+│   ├── firebase.json
+│   └── package.json
+│
+└── sample_frontend/                # Reference (gitignored)
 ```
 
-## Important Files
+---
 
-### App Shell
+## 🎮 Pages & Features
 
-- `src/main.tsx`
-  - React entrypoint.
-- `src/App.tsx`
-  - Route registration.
-- `src/components/AppLayout.tsx`
-  - Sidebar + page frame.
-- `src/components/AppSidebar.tsx`
-  - Main navigation and theme toggle.
+### 📊 Dashboard
+Real-time progress metrics, writing streaks, weekly activity
 
-### Data and Logic
+### ✅ Daily Tasks
+Monday-Sunday structured writing exercises:
+- Custom prompts with step-by-step instructions
+- Timer-based drills
+- Progress tracking
+- Category-based filtering
 
-- `src/data/promptEngine.ts`
-  - combinator-based prompt templates and smart scene prompt generation
-  - tone/phase configuration
-  - prompt reuse guard and Character Lab prompt normalization
-- `src/data/tasks.ts`
-  - central daily task definitions
-  - day list
-  - fallback writing prompts
-  - future wiki metadata on selected tasks
-- `src/hooks/useLocalStorage.ts`
-  - generic localStorage hook
-- `src/hooks/useTaskTracking.ts`
-  - task completion, streak, weekly stats, category stats
+### 🎭 Character Lab
+Comprehensive character management:
+- Character type & archetype selection
+- Personality traits & contradictions
+- Story role & motivations
+- Extended narrative fields
+- Search, filter, pin/reorder characters
+- Dedicated reader panel for viewing
 
-### Page-Level Features
+### 🔗 Character Relationships
+Interactive network visualization:
+- Draggable character nodes
+- Zoomable/pannable graph
+- Relationship types: Ally, Enemy, Mentor, Family, Unknown
+- Strength scoring (1-10)
+- Evolution timeline
 
-- `src/pages/Dashboard.tsx`
-  - progress overview and charts
-- `src/pages/DailyTasks.tsx`
-  - daily training UI, collapsibles, timers, completion state
-- `src/pages/CharacterLab.tsx`
-  - structured character CRUD and reader system
-- `src/pages/CharacterRelationships.tsx`
-  - interactive character graph and relationship management
-- `src/pages/PlotBuilder.tsx`
-  - Promise → Progress → Payoff board and plot-point form
-- `src/pages/KnowledgeBase.tsx`
-  - editable writing wiki cards
-- `src/pages/ScenePractice.tsx`
-  - freeform drafting and saved scenes
-- `src/pages/WritingAnalytics.tsx`
-  - draft-driven writing insight dashboard
-- `src/pages/SettingsPage.tsx`
-  - theme and reset behavior
-- `src/lib/writingAnalytics.ts`
-  - word trends, streaks, and style-analysis heuristics
+### 📖 Plot Builder
+Three-act story structure:
+```
+Promise      →      Progress     →      Payoff
+(Setup)           (Confrontation)      (Resolution)
+```
+Features:
+- Plot point editor with context panel
+- Character involvement tracking
+- Conflict distribution analysis
+- Foreshadowing links
+- Desktop/mobile responsive
 
-## Persistence Model
+### 🌍 World Elements
+Build and document your universe:
+- Locations & geography
+- Factions & organizations
+- Magic systems & lore
+- Theme & tone notes
 
-The app is intentionally local-first. Current storage keys include:
+### ✍️ Scene Practice
+Freeform writing environment:
+- Smart prompt engine (tone, character, phase filters)
+- Live word count tracking
+- Draft history with timestamps
+- Export to PDF/DOCX
+- Auto-generated scene titles
 
-- `writeforge-theme`
-- `writeforge-tasks`
-- `writeforge-characters`
-- `writeforge-character-seed-version`
-- `writeforge-character-relationships`
-- `writeforge-plot-builder`
-- `writeforge-drafts`
-- `writeforge-knowledge-base`
-- `writeforge-custom-tasks`
+### 📚 Custom Tasks
+Create your own exercises:
+- Drag-reorderable steps
+- Category tagging
+- Day assignment
+- Save as templates
 
-Reset behavior currently clears:
+### 📈 Analytics
+Writing insights dashboard:
+- Word count trends (chart)
+- Session consistency (heatmap)
+- Writing streaks
+- Category breakdown
+- Average session length
 
-- tasks
-- characters
-- character seed version
-- drafts
+### 📝 Writing Analytics
+Deep writing analysis:
+- Total words written
+- Sessions completed
+- Words-per-day trends
+- Dialogue vs narration ratio
+- Repetition detection
+- Clarity scoring heuristic
+- Average sentence length
 
-Theme and knowledge-base content currently persist unless explicitly removed.
+### 🧠 Knowledge Base
+Personal writing wiki with customizable rules & guidelines
 
-## Design Constraints
+---
 
-This app has a strong continuity requirement. Most recent changes were made under these rules:
+## 🔐 Security
 
-- keep the existing dark + neon glow theme
-- do not redesign page structure unless behavior requires it
-- preserve spacing, typography, and card language
-- match newly added UI to the existing system
+### API Key Protection ✅
+```
+Frontend          Cloud Function          Backend Key
+   │                    │                      │
+   ├─ prompt + token ──>│─ verify token ──────>│
+   │                    │                      │
+   │<─ response ────────┤<─ Gemini API ───────┤
+   │                    │                      │
+```
 
-That is especially important in:
+- **Gemini API key** stored ONLY on backend
+- **Frontend never sees** sensitive keys
+- **Cloud Functions validate** auth before processing
+- **All `.env` files** in `.gitignore`
 
-- `DailyTasks`
-- `CharacterLab`
+### Data Privacy ✅
+- Per-user Firestore collections
+- Security rules enforce user isolation
+- Firebase Auth for user identity
+- Automatic cleanup on account deletion
 
-## Testing / Verification Notes
+---
 
-- `npm run build` currently succeeds.
-- Vite still emits a non-blocking chunk-size warning for the main JS bundle.
-- `Browserslist` also warns that `caniuse-lite` is old, but this does not block builds.
+## 🛠️ Available Commands
 
-## Suggested Next Areas
+### Frontend
 
-- Character relationships and cross-links
-- Wiki storage for worldbuilding systems
-- Export/import for local data
-- Better chunk splitting for bundle size
-- Stronger automated tests around localStorage-heavy pages
+```bash
+npm run dev              # Start dev server (port 5173)
+npm run build            # Production build
+npm run preview          # Preview build
+npm run lint             # Run ESLint
+npm run test             # Run tests
+npm run test:watch       # Watch mode
+```
+
+### Backend
+
+```bash
+npm run dev              # Full Firebase emulator
+npm run dev:functions    # Functions + auth only
+npm run seed:local       # Populate emulator data
+npm run functions:deploy # Deploy to production
+npm run functions:logs   # View production logs
+```
+
+---
+
+## 🚀 Deployment
+
+### Frontend
+
+```bash
+cd frontend
+npm run build
+firebase deploy --only hosting
+```
+
+### Backend Functions
+
+```bash
+cd backend/functions
+
+# Set secret (production)
+firebase functions:secrets:set GEMINI_API_KEY
+
+# Deploy
+firebase deploy --only functions
+```
+
+---
+
+## 🤖 AI Integration
+
+WriterZ uses **Google Gemini API** through secure Cloud Functions:
+
+```typescript
+import { callBackendAI } from "@/services/backendAiClient";
+
+// Call AI via backend function
+const response = await callBackendAI({
+  prompt: "Help me develop this character...",
+  model: "models/gemini-2.5-flash",
+  generationConfig: {
+    maxOutputTokens: 400,
+    temperature: 0.8
+  }
+});
+
+console.log(response.text); // AI response
+```
+
+**Security Flow:**
+1. Frontend sends prompt + auth token
+2. Cloud Function verifies token with Firebase Auth
+3. Function calls Gemini API with secure backend key
+4. Response returned to authenticated user
+
+✅ No API keys exposed to frontend!
+
+---
+
+## 🧪 Testing
+
+```bash
+# Unit tests
+cd frontend
+npm run test
+
+# E2E tests
+npx playwright test
+
+# View report
+npx playwright show-report
+```
+
+---
+
+## 🐛 Troubleshooting
+
+| Issue | Solution |
+|-------|----------|
+| **AI unavailable** | Ensure backend running: `npm run dev:functions` |
+| **Firebase error** | Check `frontend/src/firebase/config.js` has valid credentials |
+| **Emulator fails** | Clear: `rm -rf .firebase-data && npm run dev` |
+| **Build fails** | Clear cache: `rm -rf node_modules && npm install` |
+| **Port already in use** | Change port in `vite.config.ts` or firebase emulator config |
+
+---
+
+## 📚 Documentation
+
+- **Setup Guide**: This README
+- **Component Library**: `frontend/src/components/`
+- **Cloud Functions**: `backend/functions/src/index.js`
+- **Firestore Rules**: `backend/firebase/firestore.rules`
+- **Data Schema**: `backend/database/`
+
+---
+
+## 🤝 Contributing
+
+1. Fork the repository
+2. Create feature branch: `git checkout -b feature/your-feature`
+3. Make changes & test thoroughly
+4. Commit: `git commit -m "Add feature description"`
+5. Push: `git push origin feature/your-feature`
+6. Open Pull Request
+
+---
+
+## 📖 License
+
+MIT License - see LICENSE file for details
+
+---
+
+## 💬 Support & Feedback
+
+- 🐛 **Found a bug?** [Open an issue](https://github.com/Pritish3110/WriterZ/issues)
+- 💡 **Have an idea?** [Start a discussion](https://github.com/Pritish3110/WriterZ/discussions)
+- 📖 **Need help?** Check troubleshooting section above
+- 🔐 **Security issue?** Please email instead of opening public issue
+
+---
+
+## 🙏 Built With
+
+| Tool | Purpose |
+|------|---------|
+| [React](https://react.dev) | UI framework |
+| [Firebase](https://firebase.google.com) | Backend & auth |
+| [Vite](https://vitejs.dev) | Build tool |
+| [TypeScript](https://www.typescriptlang.org) | Type safety |
+| [Tailwind CSS](https://tailwindcss.com) | Styling |
+| [shadcn/ui](https://ui.shadcn.com) | Component library |
+| [Google Gemini](https://ai.google.dev) | AI assistance |
+
+---
+
+<div align="center">
+
+**Built with ❤️ for writers**
+
+*Your story starts here.* ✨
+
+[✍️ Get Started](#-quick-start) · [📖 Learn More](#-features--pages) · [🐛 Report Bug](https://github.com/Pritish3110/WriterZ/issues) · [💡 Suggest Feature](https://github.com/Pritish3110/WriterZ/discussions)
+
+</div>
