@@ -34,21 +34,25 @@ __pycache__/
 # build
 dist/
 build/
+coverage/
+playwright-report/
+test-results/
 
 # env
 .env
-.env.local
-.env.*.local
+.env.*
+!.env.example
+!.env.*.example
 
 # IDE
 .codex
+.vercel/
 
 # system
 .DS_Store
 
-# Markdown files (except README)
+# Markdown files
 *.md
-!README.md
 
 # Sample frontend
 ../sample_frontend/

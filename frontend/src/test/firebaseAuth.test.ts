@@ -1,9 +1,21 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
-const firebaseAuthMock = vi.hoisted(() => {
-  const auth = { currentUser: null as any };
+interface MockFirebaseUser {
+  uid: string;
+  email: string;
+  displayName: string;
+  photoURL: string;
+  metadata: {
+    creationTime: string;
+    lastSignInTime: string;
+  };
+  [key: string]: unknown;
+}
 
-  const createUser = (overrides: Record<string, unknown> = {}) => ({
+const firebaseAuthMock = vi.hoisted(() => {
+  const auth = { currentUser: null as MockFirebaseUser | null };
+
+  const createUser = (overrides: Record<string, unknown> = {}): MockFirebaseUser => ({
     uid: "firebase-user-001",
     email: "iris@example.com",
     displayName: "Iris Vale",

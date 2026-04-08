@@ -3,18 +3,31 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 import { AuthProvider, useAuth } from "@/contexts/AuthContext";
 import { resetStorageAdapter } from "@/lib/backend/storageAdapter";
 
+interface MockFirebaseUser {
+  uid: string;
+  email: string;
+  displayName: string;
+  photoURL: string;
+  emailVerified: boolean;
+  metadata: {
+    creationTime: string;
+    lastSignInTime: string;
+  };
+  [key: string]: unknown;
+}
+
 const snapshotServiceMock = vi.hoisted(() => ({
   deleteSnapshot: vi.fn(async () => {}),
   saveSnapshot: vi.fn(async (_userId: string, snapshot: unknown) => snapshot),
 }));
 
 const firebaseAuthMock = vi.hoisted(() => {
-  const auth = { currentUser: null as any };
+  const auth = { currentUser: null as MockFirebaseUser | null };
   const state = {
-    listener: null as ((user: any) => void) | null,
+    listener: null as ((user: MockFirebaseUser | null) => void) | null,
   };
 
-  const createUser = (overrides: Record<string, unknown> = {}) => ({
+  const createUser = (overrides: Record<string, unknown> = {}): MockFirebaseUser => ({
     uid: "firebase-user-001",
     email: "iris@example.com",
     displayName: "Iris Vale",
@@ -31,8 +44,8 @@ const firebaseAuthMock = vi.hoisted(() => {
     auth,
     state,
     createUser,
-    observeAuthState: vi.fn((callback: (user: unknown) => void) => {
-      state.listener = callback as (user: any) => void;
+    observeAuthState: vi.fn((callback: (user: MockFirebaseUser | null) => void) => {
+      state.listener = callback;
       callback(auth.currentUser);
       return () => {
         if (state.listener === callback) {

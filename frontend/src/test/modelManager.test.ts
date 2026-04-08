@@ -1,32 +1,21 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
-const geminiMock = vi.hoisted(() => {
-  const primaryGenerateContent = vi.fn();
-  const fallbackGenerateContent = vi.fn();
-  const getGenerativeModel = vi.fn(({ model }) => {
-    if (model === "models/gemini-2.5-flash") {
-      return {
-        generateContent: primaryGenerateContent,
-      };
-    }
-
-    return {
-      generateContent: fallbackGenerateContent,
-    };
-  });
-
+const backendAiMock = vi.hoisted(() => {
   return {
-    primaryGenerateContent,
-    fallbackGenerateContent,
-    getGenerativeModel,
+    callBackendAI: vi.fn(),
   };
 });
 
-vi.mock("@/ai/gemini.js", () => ({
-  hasGeminiApiKey: true,
-  default: {
-    getGenerativeModel: geminiMock.getGenerativeModel,
-  },
+const authMock = vi.hoisted(() => ({
+  currentUser: { uid: "user-1" },
+}));
+
+vi.mock("@/services/backendAiClient", () => ({
+  callBackendAI: backendAiMock.callBackendAI,
+}));
+
+vi.mock("@/firebase/auth", () => ({
+  auth: authMock,
 }));
 
 import {
@@ -45,20 +34,19 @@ describe("modelManager", () => {
     vi.clearAllMocks();
     vi.useRealTimers();
     resetModelManagerStateForTests();
+    authMock.currentUser = { uid: "user-1" };
   });
 
   it("uses a higher output token budget for model generation", async () => {
-    geminiMock.primaryGenerateContent.mockResolvedValueOnce({
-      response: {
-        text: () => "Here is a complete answer.",
-      },
+    backendAiMock.callBackendAI.mockResolvedValueOnce({
+      text: "Here is a complete answer.",
     });
 
     await safeGenerate("Help me with this.", {
       fallbackInput: "help me with this",
     });
 
-    expect(geminiMock.getGenerativeModel).toHaveBeenCalledWith(
+    expect(backendAiMock.callBackendAI).toHaveBeenCalledWith(
       expect.objectContaining({
         model: PRIMARY_MODEL_NAME,
         generationConfig: expect.objectContaining({
@@ -70,69 +58,56 @@ describe("modelManager", () => {
   });
 
   it("retries once when the first response looks truncated", async () => {
-    geminiMock.primaryGenerateContent
+    backendAiMock.callBackendAI
       .mockResolvedValueOnce({
-        response: {
-          text: () => "Well, Und...",
-        },
+        text: "Well, Und...",
       })
       .mockResolvedValueOnce({
-        response: {
-          text: () => "Well, under that surface, the scene wants more tension.",
-        },
+        text: "Well, under that surface, the scene wants more tension.",
       });
 
     const result = await safeGenerate("help me raise the tension", {
       fallbackInput: "help me raise the tension",
     });
 
-    expect(geminiMock.primaryGenerateContent).toHaveBeenCalledTimes(2);
+    expect(backendAiMock.callBackendAI).toHaveBeenCalledTimes(2);
     expect(result.text).toBe(
       "Well, under that surface, the scene wants more tension.",
     );
   });
 
   it("returns a minimum fallback when the response is too short", async () => {
-    geminiMock.primaryGenerateContent
+    backendAiMock.callBackendAI
       .mockResolvedValueOnce({
-        response: {
-          text: () => "ok",
-        },
+        text: "ok",
       })
       .mockResolvedValueOnce({
-        response: {
-          text: () => "no",
-        },
+        text: "no",
       });
 
     const result = await safeGenerate("hi", {
       fallbackInput: "hi",
     });
 
-    expect(result.text).toBe("Hmm... try that again?");
+    expect(result.text).toBe("Want to expand that?");
   });
 
   it("falls back to the next model when the retry request fails", async () => {
-    geminiMock.primaryGenerateContent
+    backendAiMock.callBackendAI
       .mockResolvedValueOnce({
-        response: {
-          text: () => "Well, Und...",
-        },
+        text: "Well, Und...",
       })
       .mockRejectedValueOnce(new Error("503 overloaded"));
 
-    geminiMock.fallbackGenerateContent.mockResolvedValueOnce({
-      response: {
-        text: () => "Well, underneath her calm, the scene wants more pressure.",
-      },
+    backendAiMock.callBackendAI.mockResolvedValueOnce({
+      text: "Well, underneath her calm, the scene wants more pressure.",
     });
 
     const result = await safeGenerate("help me raise the tension", {
       fallbackInput: "help me raise the tension",
     });
 
-    expect(geminiMock.primaryGenerateContent).toHaveBeenCalledTimes(2);
-    expect(geminiMock.fallbackGenerateContent).toHaveBeenCalledTimes(1);
+    expect(backendAiMock.callBackendAI).toHaveBeenCalledTimes(3);
     expect(result.text).toBe(
       "Well, underneath her calm, the scene wants more pressure.",
     );
@@ -141,7 +116,7 @@ describe("modelManager", () => {
   });
 
   it("stops immediately when the primary model hits quota exhaustion", async () => {
-    geminiMock.primaryGenerateContent.mockRejectedValueOnce(
+    backendAiMock.callBackendAI.mockRejectedValueOnce(
       new Error("429 quota exceeded"),
     );
 
@@ -149,8 +124,7 @@ describe("modelManager", () => {
       fallbackInput: "help me raise the tension",
     });
 
-    expect(geminiMock.primaryGenerateContent).toHaveBeenCalledTimes(1);
-    expect(geminiMock.fallbackGenerateContent).not.toHaveBeenCalled();
+    expect(backendAiMock.callBackendAI).toHaveBeenCalledTimes(1);
     expect(result.text).toBe(QUOTA_EXHAUSTED_MESSAGE);
     expect(result.quotaLimited).toBe(true);
   });
@@ -159,7 +133,7 @@ describe("modelManager", () => {
     vi.useFakeTimers();
     vi.setSystemTime(new Date("2026-04-07T00:00:00.000Z"));
 
-    geminiMock.primaryGenerateContent.mockRejectedValueOnce(
+    backendAiMock.callBackendAI.mockRejectedValueOnce(
       new Error("429 quota exceeded"),
     );
 
@@ -173,8 +147,7 @@ describe("modelManager", () => {
       fallbackInput: "help me raise the tension",
     });
 
-    expect(geminiMock.primaryGenerateContent).toHaveBeenCalledTimes(1);
-    expect(geminiMock.fallbackGenerateContent).not.toHaveBeenCalled();
+    expect(backendAiMock.callBackendAI).toHaveBeenCalledTimes(1);
     expect(result.text).toBe(QUOTA_EXHAUSTED_MESSAGE);
     expect(result.quotaLimited).toBe(true);
   });

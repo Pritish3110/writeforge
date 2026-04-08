@@ -12,6 +12,7 @@ import {
   auth,
 } from "@/firebase/auth.js";
 import { useAuth } from "@/contexts/AuthContext";
+import { subscribeToStorage } from "@/lib/backend/storageAdapter";
 import {
   createEmptyWorkspaceSnapshot,
   hydrateWorkspaceSnapshot,
@@ -41,6 +42,8 @@ const BackendSyncContext = createContext<BackendSyncContextValue>({
   syncNow: async () => {},
 });
 
+const SYNC_DEBOUNCE_MS = 3000;
+
 export const useBackendSync = () => useContext(BackendSyncContext);
 
 export const BackendSyncProvider = ({ children }: { children: ReactNode }) => {
@@ -54,9 +57,27 @@ export const BackendSyncProvider = ({ children }: { children: ReactNode }) => {
   const [bootResolved, setBootResolved] = useState(!enabled);
   const lastSnapshotRef = useRef<string>("");
   const syncInFlightRef = useRef(false);
+  const pendingSyncTimeoutRef = useRef<number | null>(null);
+  const queuedSyncRef = useRef(false);
+  const hydratingSnapshotRef = useRef(false);
+  const scheduleSyncRef = useRef<(delay?: number) => void>(() => {});
+
+  const clearPendingSync = useCallback(() => {
+    if (pendingSyncTimeoutRef.current !== null) {
+      window.clearTimeout(pendingSyncTimeoutRef.current);
+      pendingSyncTimeoutRef.current = null;
+    }
+  }, []);
 
   const syncNow = useCallback(async () => {
-    if (!enabled || !userId || syncInFlightRef.current) return;
+    clearPendingSync();
+
+    if (!enabled || !userId) return;
+
+    if (syncInFlightRef.current) {
+      queuedSyncRef.current = true;
+      return;
+    }
 
     syncInFlightRef.current = true;
     setStatus("syncing");
@@ -64,6 +85,7 @@ export const BackendSyncProvider = ({ children }: { children: ReactNode }) => {
     try {
       const snapshot = readWorkspaceSnapshot(userId);
       const savedSnapshot = await saveSnapshot(userId, snapshot);
+      hydratingSnapshotRef.current = true;
       hydrateWorkspaceSnapshot(savedSnapshot);
       lastSnapshotRef.current = JSON.stringify(readWorkspaceSnapshot(userId));
       setLastSyncedAt(new Date().toISOString());
@@ -73,15 +95,46 @@ export const BackendSyncProvider = ({ children }: { children: ReactNode }) => {
       console.error("Workspace sync failed.", error);
       throw error;
     } finally {
+      hydratingSnapshotRef.current = false;
       syncInFlightRef.current = false;
+
+      if (
+        queuedSyncRef.current ||
+        (enabled &&
+          userId &&
+          JSON.stringify(readWorkspaceSnapshot(userId)) !== lastSnapshotRef.current)
+      ) {
+        queuedSyncRef.current = false;
+        scheduleSyncRef.current();
+      }
     }
-  }, [enabled, userId]);
+  }, [clearPendingSync, enabled, userId]);
+
+  const scheduleSync = useCallback(
+    (delay = SYNC_DEBOUNCE_MS) => {
+      if (!enabled || !userId || !bootResolved) return;
+
+      clearPendingSync();
+      pendingSyncTimeoutRef.current = window.setTimeout(() => {
+        pendingSyncTimeoutRef.current = null;
+        void syncNow();
+      }, delay);
+    },
+    [bootResolved, clearPendingSync, enabled, syncNow, userId],
+  );
+
+  useEffect(() => {
+    scheduleSyncRef.current = scheduleSync;
+  }, [scheduleSync]);
 
   useEffect(() => {
     setStatus(enabled ? "booting" : "disabled");
     setBootResolved(!enabled);
     lastSnapshotRef.current = "";
-  }, [enabled, userId]);
+    queuedSyncRef.current = false;
+    hydratingSnapshotRef.current = false;
+    clearPendingSync();
+  }, [clearPendingSync, enabled, userId]);
 
   useEffect(() => {
     if (!enabled || !userId) return;
@@ -105,6 +158,7 @@ export const BackendSyncProvider = ({ children }: { children: ReactNode }) => {
 
         if (!active) return;
 
+        hydratingSnapshotRef.current = true;
         hydrateWorkspaceSnapshot(snapshot);
         lastSnapshotRef.current = JSON.stringify(readWorkspaceSnapshot(userId));
         setLastSyncedAt(new Date().toISOString());
@@ -113,10 +167,12 @@ export const BackendSyncProvider = ({ children }: { children: ReactNode }) => {
         if (!active) return;
 
         console.error("Unable to load the saved workspace snapshot.", error);
+        hydratingSnapshotRef.current = true;
         hydrateWorkspaceSnapshot(fallbackSnapshot);
         lastSnapshotRef.current = JSON.stringify(readWorkspaceSnapshot(userId));
         setStatus("error");
       } finally {
+        hydratingSnapshotRef.current = false;
         if (active) {
           setBootResolved(true);
         }
@@ -133,21 +189,22 @@ export const BackendSyncProvider = ({ children }: { children: ReactNode }) => {
   useEffect(() => {
     if (!enabled || !userId || !bootResolved) return;
 
-    const interval = window.setInterval(() => {
+    return subscribeToStorage(() => {
+      if (hydratingSnapshotRef.current) {
+        return;
+      }
+
       const currentSignature = JSON.stringify(readWorkspaceSnapshot(userId));
 
-      if (
-        currentSignature !== lastSnapshotRef.current &&
-        !syncInFlightRef.current
-      ) {
-        void syncNow();
+      if (currentSignature === lastSnapshotRef.current) {
+        return;
       }
-    }, 1500);
 
-    return () => {
-      window.clearInterval(interval);
-    };
-  }, [bootResolved, enabled, syncNow, userId]);
+      scheduleSync();
+    });
+  }, [bootResolved, enabled, scheduleSync, userId]);
+
+  useEffect(() => clearPendingSync, [clearPendingSync]);
 
   const value = useMemo(
     () => ({

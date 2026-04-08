@@ -1,5 +1,7 @@
+# =========================
 # Logs
-logs
+# =========================
+logs/
 *.log
 npm-debug.log*
 yarn-debug.log*
@@ -7,15 +9,53 @@ yarn-error.log*
 pnpm-debug.log*
 lerna-debug.log*
 
-node_modules
-dist
-dist-ssr
-*.local
+# =========================
+# Node / Dependencies
+# =========================
+node_modules/
 
-# Editor directories and files
+# =========================
+# Build Outputs
+# =========================
+dist/
+dist-ssr/
+build/
+coverage/
+playwright-report/
+test-results/
+
+# =========================
+# Environment Files (CRITICAL)
+# =========================
+.env
+.env.*
+!.env.example
+!.env.*.example
+
+# =========================
+# Firebase / Hosting
+# =========================
+.firebase/
+.firebase-data/
+firebase-debug.log
+firebase-debug.*.log
+.runtimeconfig.json
+service-account*.json
+.vercel/
+
+# =========================
+# Python (if any)
+# =========================
+.venv/
+__pycache__/
+*.pyc
+
+# =========================
+# Editor / OS Files
+# =========================
 .vscode/*
 !.vscode/extensions.json
-.idea
+.idea/
 .DS_Store
 *.suo
 *.ntvs*
@@ -23,27 +63,14 @@ dist-ssr
 *.sln
 *.sw?
 
-# dependencies
-node_modules/
+# =========================
+# Project-specific ignores
+# =========================
+sample_frontend/
+.codex/
 
-# python
-.venv/
-__pycache__/
-*.pyc
-
-# build
-dist/
-build/
-
-# env
-.env
-
-# system
-.DS_Store
-
+# =========================
+# Docs (ONLY ignore extra markdown, keep main README)
+# =========================
 *.md
 !README.md
-
-sample_frontend/
-
-.codex

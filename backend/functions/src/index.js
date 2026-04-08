@@ -5,13 +5,28 @@ import { GoogleGenerativeAI } from "@google/generative-ai";
 // Initialize Firebase Admin
 admin.initializeApp();
 
-// Initialize Gemini
-const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY);
+let geminiClient = null;
+let geminiApiKey = "";
+
+const getGeminiClient = () => {
+  const apiKey = process.env.GEMINI_API_KEY?.trim();
+
+  if (!apiKey) {
+    return null;
+  }
+
+  if (!geminiClient || geminiApiKey !== apiKey) {
+    geminiClient = new GoogleGenerativeAI(apiKey);
+    geminiApiKey = apiKey;
+  }
+
+  return geminiClient;
+};
 
 /**
  * Cloud Function: generateText
  * Generates text using Gemini API with authentication
- * 
+ *
  * Request body:
  * {
  *   "prompt": "Your prompt here",
@@ -19,8 +34,9 @@ const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY);
  *   "generationConfig": { "maxOutputTokens": 150, "temperature": 0.7 }
  * }
  */
-export const generateText = functions.https.onCall(
-  async (data, context) => {
+export const generateText = functions
+  .runWith({ secrets: ["GEMINI_API_KEY"] })
+  .https.onCall(async (data, context) => {
     // Verify user is authenticated
     if (!context.auth) {
       throw new functions.https.HttpsError(
@@ -41,7 +57,9 @@ export const generateText = functions.https.onCall(
       );
     }
 
-    if (!process.env.GEMINI_API_KEY) {
+    const aiClient = getGeminiClient();
+
+    if (!aiClient) {
       console.error("GEMINI_API_KEY is not set");
       throw new functions.https.HttpsError(
         "internal",
@@ -51,7 +69,7 @@ export const generateText = functions.https.onCall(
 
     try {
       // Call Gemini API
-      const generativeModel = genAI.getGenerativeModel({
+      const generativeModel = aiClient.getGenerativeModel({
         model,
         generationConfig: {
           maxOutputTokens: 150,
@@ -92,14 +110,13 @@ export const generateText = functions.https.onCall(
         "Failed to generate text. Please try again."
       );
     }
-  }
-);
+  });
 
 /**
  * Cloud Function: healthCheck
  * Simple endpoint to verify the function is running
  */
-export const healthCheck = functions.https.onCall(async (data, context) => {
+export const healthCheck = functions.https.onCall(async (_data, context) => {
   return {
     status: "ok",
     timestamp: new Date().toISOString(),

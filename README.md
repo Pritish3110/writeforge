@@ -101,10 +101,12 @@ cd ../backend/functions
 npm install
 ```
 
-Create `backend/functions/.env`:
+Create `backend/functions/.env` for the local emulator only:
 ```env
 GEMINI_API_KEY=your_key_here
 ```
+
+For production, keep the key in Firebase Secret Manager instead of any frontend or committed file.
 
 ### 4. Run Development Server
 
@@ -288,10 +290,11 @@ Frontend          Cloud Function          Backend Key
    │                    │                      │
 ```
 
-- **Gemini API key** stored ONLY on backend
-- **Frontend never sees** sensitive keys
+- **Gemini API key** stays in `backend/functions/.env` for local emulators or Firebase Secret Manager in production
+- **Frontend never needs** `VITE_GEMINI_API_KEY`
 - **Cloud Functions validate** auth before processing
-- **All `.env` files** in `.gitignore`
+- **Local `.env*` files** are gitignored, while `.env.example` files stay safe to commit
+- `frontend/src/firebase/config.js` contains Firebase web app config, which is public client configuration rather than a server secret
 
 ### Data Privacy ✅
 - Per-user Firestore collections
@@ -328,25 +331,33 @@ npm run functions:logs   # View production logs
 
 ## 🚀 Deployment
 
-### Frontend
+### Current Deployment Shape
+
+- **Frontend:** deploy the `frontend/` app to Vercel
+- **Backend:** deploy Firestore rules and Cloud Functions from `backend/`
+
+### Frontend (Vercel)
 
 ```bash
 cd frontend
 npm run build
-firebase deploy --only hosting
 ```
 
-### Backend Functions
+Set the Vercel project root to `frontend/`.
+
+### Backend (Firebase)
 
 ```bash
-cd backend/functions
+cd backend
 
 # Set secret (production)
 firebase functions:secrets:set GEMINI_API_KEY
 
-# Deploy
-firebase deploy --only functions
+# Deploy rules + functions
+firebase deploy --only firestore:rules,functions
 ```
+
+If you want Firebase Hosting later, add a hosting target first. The current `backend/firebase.json` only configures Firestore, Functions, and emulators.
 
 ---
 
@@ -401,7 +412,7 @@ npx playwright show-report
 | Issue | Solution |
 |-------|----------|
 | **AI unavailable** | Ensure backend running: `npm run dev:functions` |
-| **Firebase error** | Check `frontend/src/firebase/config.js` has valid credentials |
+| **Firebase error** | Check `frontend/src/firebase/config.js` points at the right Firebase project |
 | **Emulator fails** | Clear: `rm -rf .firebase-data && npm run dev` |
 | **Build fails** | Clear cache: `rm -rf node_modules && npm install` |
 | **Port already in use** | Change port in `vite.config.ts` or firebase emulator config |
