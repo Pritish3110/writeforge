@@ -1,20 +1,10 @@
 import { auth } from "@/firebase/auth";
-import { functions } from "@/firebase/config";
-import { httpsCallable } from "firebase/functions";
 
 /**
- * Backend AI Service - Calls Firebase Cloud Functions for AI operations
- * The Gemini API key is now stored securely on the backend
+ * Backend AI Service - Calls the Express backend for AI operations.
  */
-
-let generateTextFunction: ReturnType<typeof httpsCallable> | null = null;
-
-export const getGenerateTextFunction = () => {
-  if (!generateTextFunction) {
-    generateTextFunction = httpsCallable(functions, "generateText");
-  }
-  return generateTextFunction;
-};
+const DEFAULT_BACKEND_URL = "http://localhost:8787";
+const BACKEND_URL = import.meta.env.VITE_API_URL?.trim() || DEFAULT_BACKEND_URL;
 
 export interface GenerateTextRequest {
   prompt: string;
@@ -32,30 +22,41 @@ export interface GenerateTextResponse {
   userId: string;
 }
 
-/**
- * Call the backend Gemini API function
- * Requires user to be authenticated
- */
-export const callBackendAI = async (
-  request: GenerateTextRequest
-): Promise<GenerateTextResponse> => {
+const createBackendHeaders = async () => {
   const user = auth.currentUser;
 
   if (!user) {
     throw new Error("User must be authenticated to call AI");
   }
 
-  try {
-    const generateText = getGenerateTextFunction();
-    const response = (await generateText(request)) as {
-      data: GenerateTextResponse;
-    };
+  const idToken = await user.getIdToken();
 
-    if (!response.data?.success) {
-      throw new Error("Failed to generate text");
+  return {
+    "Content-Type": "application/json",
+    Authorization: `Bearer ${idToken}`,
+  };
+};
+
+/**
+ * Call the backend Gemini API route.
+ * Requires user to be authenticated
+ */
+export const callBackendAI = async (
+  request: GenerateTextRequest
+): Promise<GenerateTextResponse> => {
+  try {
+    const response = await fetch(`${BACKEND_URL}/api/generate`, {
+      method: "POST",
+      headers: await createBackendHeaders(),
+      body: JSON.stringify(request),
+    });
+    const payload = await response.json();
+
+    if (!response.ok || !payload?.success) {
+      throw new Error(payload?.error || "Failed to generate text");
     }
 
-    return response.data;
+    return payload as GenerateTextResponse;
   } catch (error) {
     console.error("Backend AI Error:", error);
 
@@ -73,9 +74,8 @@ export const callBackendAI = async (
  */
 export const checkAIServiceHealth = async (): Promise<boolean> => {
   try {
-    const healthCheckFunction = httpsCallable(functions, "healthCheck");
-    await healthCheckFunction({});
-    return true;
+    const response = await fetch(`${BACKEND_URL}/health`);
+    return response.ok;
   } catch (error) {
     console.warn("AI service health check failed:", error);
     return false;

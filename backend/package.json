@@ -3,19 +3,16 @@
   "private": true,
   "type": "module",
   "scripts": {
-    "dev": "firebase emulators:start --config firebase.json --project writerz-local",
-    "dev:import": "firebase emulators:start --config firebase.json --project writerz-local --import ./.firebase-data --export-on-exit",
-    "dev:functions": "firebase emulators:start --only functions,auth --config firebase.json --project writerz-local",
-    "dev:mock": "node mock-server.mjs",
+    "dev": "node --watch server.js",
+    "start": "node server.js",
     "seed:local": "FIREBASE_PROJECT_ID=writerz-local FIRESTORE_EMULATOR_HOST=127.0.0.1:8081 node scripts/seed-firestore.mjs",
-    "seed:remote": "node scripts/seed-firestore.mjs",
-    "functions:deploy": "firebase deploy --only functions",
-    "functions:logs": "firebase functions:log"
+    "seed:remote": "node scripts/seed-firestore.mjs"
   },
   "dependencies": {
+    "cors": "^2.8.5",
+    "dotenv": "^16.6.1",
+    "express": "^4.21.2",
+    "express-rate-limit": "^7.5.0",
     "firebase-admin": "^13.7.0"
-  },
-  "devDependencies": {
-    "firebase-tools": "latest"
   }
 }

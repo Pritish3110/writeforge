@@ -1,8 +1,4 @@
 node_modules/
-.firebase-data/
-.firebase/
-firebase-debug.log
-firebase-debug.*.log
 service-account*.json
 *.local
 coverage/
@@ -13,10 +9,6 @@ coverage/
 !.env.example
 !.env.*.example
 
-# Firebase functions
-functions/lib/
-functions/node_modules/
-
 # IDE
 .codex
 
@@ -24,5 +16,8 @@ functions/node_modules/
 GEMINI_API_KEY
 .runtimeconfig.json
 
-# Markdown files
-*.md
+# Deployment / cloud state
+.firebase/
+.firebase-data/
+firebase-debug.log
+firebase-debug.*.log
