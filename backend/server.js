@@ -26,7 +26,7 @@ app.use(
 );
 app.use(express.json({ limit: "1mb" }));
 
-app.get("/healthz", (_request, response) => {
+app.get("/health", (_request, response) => {
   response.status(200).send("OK");
 });
 app.use("/api/generate", generateLimiter);
