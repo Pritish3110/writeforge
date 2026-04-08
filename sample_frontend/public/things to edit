@@ -1,0 +1,23 @@
+on mobile the plot builder page there is an issue with the scrolling when clicked on the add new plot or story context, the ui forces the page downwards directly to the save button, and when scrolled up, the menu minimizes and goes away, hence the user is not able to view or edit the contents on the top of the page such as the title and description for the scene
+
+lore library
+
+week starts from monday and the task should stay marked until the week refreshes.
+
+Dashboard
+Grammer - 7 parts
+Simile and figures of speech
+Vocabulary
+
+
+Plot builder ui
+World element designer category and element update based on the templates
+Scene practice add more tone including the templates
+
+Backend, find how data is being stored and safely migrate on supabase
+
+Auth, RAG, lore library, writing suggestions.
+
+Publishing site, writing chapters, wikipedia.
+
+Maybe connect patreon or other websites to publish.
