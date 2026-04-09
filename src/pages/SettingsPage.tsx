@@ -38,7 +38,7 @@ const SettingsPage = () => {
     <div className="max-w-2xl mx-auto space-y-6">
       <div>
         <h1 className="text-3xl font-bold tracking-tight">Settings</h1>
-        <p className="text-muted-foreground mt-1 font-mono text-sm">Customize your WriteForge experience.</p>
+        <p className="text-muted-foreground mt-1 font-mono text-sm">Customize your WriterZ experience.</p>
       </div>
 
       <Card className="glow-card glow-border">

@@ -41,7 +41,7 @@ export function AppSidebar() {
             <PenTool className="h-6 w-6 text-neon-purple shrink-0" />
             {!collapsed && (
               <span className="font-mono text-lg font-bold text-neon-purple tracking-tight">
-                WriteForge
+                WriterZ
               </span>
             )}
           </div>

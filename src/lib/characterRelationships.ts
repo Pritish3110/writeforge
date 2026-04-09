@@ -82,7 +82,7 @@ const DEFAULT_CHARACTERS: RelationshipCharacter[] = [
     name: "luna",
     type: "Main Character",
     logline:
-      "A secondary seeded profile used to test multi-character systems inside WriteForge.",
+      "A secondary seeded profile used to test multi-character systems inside WriterZ.",
   },
 ];
 

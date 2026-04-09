@@ -236,7 +236,7 @@ const buildTextExport = (sharedTasks) => {
   });
 
   return [
-    "WriteForge Task Export",
+    "WriterZ Task Export",
     `Exported At: ${new Date().toLocaleString()}`,
     `Task Count: ${sharedTasks.length}`,
     "",
