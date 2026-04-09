@@ -23,7 +23,7 @@ const items = [
   { title: "Scene Practice", url: "/scene-practice", icon: PenTool },
   { title: "World Element Designer", url: "/world-elements", icon: Sparkles },
   { title: "Custom Task Builder", url: "/custom-task-builder", icon: Wrench },
-  { title: "Upcoming Features", url: "/upcoming", icon: Rocket },
+  // { title: "Upcoming Features", url: "/upcoming", icon: Rocket },
   { title: "Settings", url: "/settings", icon: Settings },
 ];
 
