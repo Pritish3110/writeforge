@@ -6,7 +6,11 @@ import { aiRoutes } from "./routes/aiRoutes.js";
 
 const app = express();
 const PORT = Number.parseInt(process.env.PORT || "5000", 10);
-const frontendUrl = process.env.FRONTEND_URL?.trim();
+const DEFAULT_FRONTEND_URL = "http://localhost:5173";
+const allowedOrigins = (process.env.FRONTEND_URL || DEFAULT_FRONTEND_URL)
+  .split(",")
+  .map((origin) => origin.trim())
+  .filter(Boolean);
 const generateLimiter = rateLimit({
   windowMs: 60 * 1000,
   max: 10,
@@ -20,7 +24,7 @@ const generateLimiter = rateLimit({
 
 app.use(
   cors({
-    origin: frontendUrl || true,
+    origin: allowedOrigins.length === 1 ? allowedOrigins[0] : allowedOrigins,
     credentials: true,
   }),
 );

@@ -1,0 +1,30 @@
+export const STORAGE_KEYS = {
+  theme: "writeforge-theme",
+  tasks: "writeforge-tasks",
+  customTasks: "writeforge-custom-tasks",
+  taskTemplates: "taskTemplates",
+  characters: "writeforge-characters",
+  characterSeedVersion: "writeforge-character-seed-version",
+  characterRelationships: "writeforge-character-relationships",
+  plotBuilder: "writeforge-plot-builder",
+  drafts: "writeforge-drafts",
+  worldElements: "writeforge-world-elements",
+  knowledgeBase: "writeforge-knowledge-base",
+  scenePracticeWorldElement: "writeforge-scene-practice-world-element",
+  backendUser: "writerz-backend-user",
+} as const;
+
+export const RESETTABLE_STORAGE_KEYS = [
+  STORAGE_KEYS.tasks,
+  STORAGE_KEYS.characters,
+  "writeforge-kael-seeded",
+  STORAGE_KEYS.characterSeedVersion,
+  STORAGE_KEYS.characterRelationships,
+  STORAGE_KEYS.customTasks,
+  STORAGE_KEYS.taskTemplates,
+  STORAGE_KEYS.plotBuilder,
+  STORAGE_KEYS.drafts,
+  STORAGE_KEYS.worldElements,
+  STORAGE_KEYS.knowledgeBase,
+  STORAGE_KEYS.scenePracticeWorldElement,
+] as const;

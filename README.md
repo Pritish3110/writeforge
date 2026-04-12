@@ -43,6 +43,7 @@ WriterZ/
 │   │   ├── lib/
 │   │   ├── pages/
 │   │   └── services/
+│   ├── README.md
 │   ├── .env.example
 │   └── package.json
 └── backend/
@@ -59,11 +60,22 @@ WriterZ/
     │   └── firestore.indexes.json
     ├── database/
     ├── scripts/
+    ├── README.md
     ├── .env.example
     ├── firebase.json
     ├── package.json
     └── server.js
 ```
+
+## Public Documentation
+
+Only these Markdown files are intended for GitHub-facing documentation:
+
+- `README.md`: project overview, architecture, setup, deployment, and security model
+- `frontend/README.md`: frontend stack, structure, commands, routes, and client-side security notes
+- `backend/README.md`: backend responsibilities, setup, commands, deployment, and Firebase scope
+
+Other Markdown files are private implementation notes, error logs, or AI-agent handoff notes and are ignored by Git.
 
 ## Local Setup
 
@@ -99,6 +111,7 @@ FIREBASE_SERVICE_ACCOUNT={"type":"service_account","project_id":"your-project-id
 ```
 
 You can also use `FIREBASE_SERVICE_ACCOUNT_PATH` instead of inline JSON if your deploy platform mounts a file.
+Use a comma-separated `FRONTEND_URL` value if you need to allow multiple trusted frontend origins.
 
 ### 3. Run Locally
 

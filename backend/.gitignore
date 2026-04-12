@@ -15,9 +15,17 @@ coverage/
 # API Keys and secrets
 GEMINI_API_KEY
 .runtimeconfig.json
+*.pem
+*.p12
+*.p8
+*.key
 
 # Deployment / cloud state
 .firebase/
 .firebase-data/
 firebase-debug.log
 firebase-debug.*.log
+
+# Markdown files
+*.md
+!README.md

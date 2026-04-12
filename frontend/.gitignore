@@ -53,6 +53,7 @@ test-results/
 
 # Markdown files
 *.md
+!README.md
 
 # Sample frontend
 ../sample_frontend/

@@ -41,6 +41,10 @@ firebase-debug.log
 firebase-debug.*.log
 .runtimeconfig.json
 service-account*.json
+*.pem
+*.p12
+*.p8
+*.key
 .vercel/
 
 # =========================
@@ -67,12 +71,17 @@ __pycache__/
 # Project-specific ignores
 # =========================
 sample_frontend/
+.codex
 .codex/
 
 # =========================
-# Docs (ONLY ignore extra markdown, keep main README)
+# Docs (keep only the public READMEs)
 # =========================
 *.md
 !README.md
+!frontend/README.md
+!backend/README.md
 
-src/
+# Ignore only a legacy root-level scaffold if it reappears.
+# Do not ignore frontend/src, which is active application source.
+/src/

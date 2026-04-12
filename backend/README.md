@@ -8,6 +8,10 @@ This backend is an Express API for WriterZ.
 - Proxy Gemini requests securely from the server
 - Optionally perform validated Firestore reads and writes in the future
 
+## Public Documentation Role
+
+This is the public backend README for GitHub. Keep backend setup, commands, deployment notes, and security expectations here. Private troubleshooting logs, schema notes, and AI-agent handoff notes should stay in ignored Markdown files.
+
 ## Structure
 
 ```text
@@ -46,6 +50,8 @@ FRONTEND_URL=http://localhost:5173
 GEMINI_API_KEY=your_gemini_api_key
 FIREBASE_SERVICE_ACCOUNT={"type":"service_account","project_id":"your-project-id"}
 ```
+
+Use a comma-separated `FRONTEND_URL` value if more than one trusted frontend origin needs access.
 
 ## Run
 
