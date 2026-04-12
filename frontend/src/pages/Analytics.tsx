@@ -1,10 +1,14 @@
+import { useLearningEngine } from "@/hooks/useLearningEngine";
 import { useTaskTracking } from "@/hooks/useTaskTracking";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Badge } from "@/components/ui/badge";
 import { LineChart, Line, BarChart, Bar, XAxis, YAxis, ResponsiveContainer, Tooltip } from "recharts";
-import { Flame, Trophy } from "lucide-react";
+import { BrainCircuit, Flame, Trophy } from "lucide-react";
 
 const Analytics = () => {
   const { getLast7Days, getLast28Days, getStreak, getCategoryStats } = useTaskTracking();
+  const { progress: learningProgress, loadingProgress, error: learningError } =
+    useLearningEngine({ loadToday: false, loadProgress: true });
   const last7 = getLast7Days();
   const last28 = getLast28Days();
   const streak = getStreak();
@@ -150,6 +154,186 @@ const Analytics = () => {
           </div>
         </CardContent>
       </Card>
+
+      <div className="space-y-4">
+        <div>
+          <h2 className="text-xl font-semibold tracking-tight">Learning Engine Analytics</h2>
+          <p className="mt-1 font-mono text-sm text-muted-foreground">
+            Track spaced repetition streaks, weak-area reinforcement, and theme progression.
+          </p>
+        </div>
+
+        {learningError ? (
+          <Card className="glow-card glow-border border-dashed bg-muted/10">
+            <CardContent className="py-6">
+              <p className="text-sm text-muted-foreground">{learningError}</p>
+              <p className="mt-2 text-xs font-mono text-muted-foreground">
+                Start the backend learning routes to unlock these analytics.
+              </p>
+            </CardContent>
+          </Card>
+        ) : null}
+
+        <div className="grid grid-cols-1 gap-4 md:grid-cols-3">
+          <Card className="glow-card glow-border">
+            <CardHeader className="pb-2">
+              <CardTitle className="text-sm font-mono text-muted-foreground flex items-center gap-2">
+                <BrainCircuit className="h-4 w-4 text-neon-cyan" /> Learning Streak
+              </CardTitle>
+            </CardHeader>
+            <CardContent>
+              <p className="text-4xl font-bold font-mono text-neon-cyan">
+                {loadingProgress ? "..." : learningProgress?.streak.current || 0}
+              </p>
+              <p className="text-xs text-muted-foreground">
+                longest {learningProgress?.streak.longest || 0} day
+                {(learningProgress?.streak.longest || 0) === 1 ? "" : "s"}
+              </p>
+            </CardContent>
+          </Card>
+
+          <Card className="glow-card glow-border">
+            <CardHeader className="pb-2">
+              <CardTitle className="text-sm font-mono text-muted-foreground">Topics Mastered</CardTitle>
+            </CardHeader>
+            <CardContent>
+              <p className="text-4xl font-bold font-mono text-neon-purple">
+                {loadingProgress ? "..." : learningProgress?.topicsCompleted || 0}
+              </p>
+              <p className="text-xs text-muted-foreground">
+                of {learningProgress?.totalTopics || 0} topics in the current curriculum
+              </p>
+            </CardContent>
+          </Card>
+
+          <Card className="glow-card glow-border">
+            <CardHeader className="pb-2">
+              <CardTitle className="text-sm font-mono text-muted-foreground">Reviews Due Today</CardTitle>
+            </CardHeader>
+            <CardContent>
+              <p className="text-4xl font-bold font-mono text-neon-pink">
+                {loadingProgress ? "..." : learningProgress?.dueToday || 0}
+              </p>
+              <p className="text-xs text-muted-foreground">
+                queued for the next learning session
+              </p>
+            </CardContent>
+          </Card>
+        </div>
+
+        <div className="grid grid-cols-1 gap-4 xl:grid-cols-[1.05fr_0.95fr]">
+          <Card className="glow-card glow-border">
+            <CardHeader>
+              <CardTitle className="text-sm font-mono text-muted-foreground">
+                Theme Progression
+              </CardTitle>
+            </CardHeader>
+            <CardContent className="space-y-4">
+              {learningProgress?.themes?.length ? (
+                learningProgress.themes.map((theme) => {
+                  const completionRate =
+                    theme.totalTopics > 0
+                      ? (theme.masteredTopics / theme.totalTopics) * 100
+                      : 0;
+
+                  return (
+                    <div key={theme.id} className="rounded-xl border border-border bg-muted/20 p-4">
+                      <div className="flex flex-wrap items-center justify-between gap-2">
+                        <div>
+                          <p className="font-medium">{theme.title}</p>
+                          <p className="mt-1 text-xs font-mono text-muted-foreground">
+                            {theme.masteredTopics}/{theme.totalTopics} mastered
+                          </p>
+                        </div>
+                        <Badge variant="outline" className="font-mono text-[11px] uppercase">
+                          {theme.status.replace("_", " ")}
+                        </Badge>
+                      </div>
+                      <div className="mt-3 h-2 rounded-full bg-muted">
+                        <div
+                          className="h-full rounded-full bg-neon-cyan"
+                          style={{ width: `${completionRate}%` }}
+                        />
+                      </div>
+                    </div>
+                  );
+                })
+              ) : (
+                <p className="text-sm text-muted-foreground">
+                  No learning theme data yet.
+                </p>
+              )}
+            </CardContent>
+          </Card>
+
+          <Card className="glow-card glow-border">
+            <CardHeader>
+              <CardTitle className="text-sm font-mono text-muted-foreground">
+                Weak Area Reinforcement
+              </CardTitle>
+            </CardHeader>
+            <CardContent className="space-y-3">
+              {learningProgress?.weakTopics?.length ? (
+                learningProgress.weakTopics.map((topic) => (
+                  <div key={topic.topicId} className="rounded-xl border border-border bg-muted/20 p-4">
+                    <div className="flex flex-wrap items-center justify-between gap-2">
+                      <div>
+                        <p className="font-medium">{topic.title}</p>
+                        <p className="mt-1 text-xs font-mono text-muted-foreground">
+                          {topic.themeTitle} • stage {topic.stage}
+                        </p>
+                      </div>
+                      <Badge variant="outline" className="font-mono text-[11px]">
+                        Again {topic.againCount} • Hard {topic.hardCount}
+                      </Badge>
+                    </div>
+                    <p className="mt-3 text-sm text-muted-foreground">
+                      {topic.recommendation}
+                    </p>
+                  </div>
+                ))
+              ) : (
+                <p className="text-sm text-muted-foreground">
+                  No weak areas flagged right now. Keep reviewing to build a stronger signal.
+                </p>
+              )}
+            </CardContent>
+          </Card>
+        </div>
+
+        <Card className="glow-card glow-border">
+          <CardHeader>
+            <CardTitle className="text-sm font-mono text-muted-foreground">
+              Learning Activity Heatmap
+            </CardTitle>
+          </CardHeader>
+          <CardContent>
+            <div className="flex flex-wrap gap-1">
+              {learningProgress?.heatmap?.length ? (
+                learningProgress.heatmap.map((cell) => (
+                  <div
+                    key={cell.date}
+                    title={`${cell.date} · ${cell.count} review${cell.count === 1 ? "" : "s"}`}
+                    className="h-6 w-6 rounded-sm"
+                    style={{
+                      backgroundColor:
+                        cell.level === 0
+                          ? "hsl(var(--muted))"
+                          : cell.level === 1
+                            ? "hsl(var(--neon-cyan) / 0.3)"
+                            : cell.level === 2
+                              ? "hsl(var(--neon-cyan) / 0.6)"
+                              : "hsl(var(--neon-cyan))",
+                    }}
+                  />
+                ))
+              ) : (
+                <p className="text-sm text-muted-foreground">No learning activity yet.</p>
+              )}
+            </div>
+          </CardContent>
+        </Card>
+      </div>
     </div>
   );
 };

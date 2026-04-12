@@ -1,0 +1,72 @@
+[
+  {
+    "id": "simile",
+    "order": 1,
+    "title": "Simile",
+    "definition": "Comparison using like or as",
+    "examples": [
+      "As brave as a lion",
+      "Runs like the wind"
+    ]
+  },
+  {
+    "id": "metaphor",
+    "order": 2,
+    "title": "Metaphor",
+    "definition": "Direct comparison without like or as",
+    "examples": [
+      "Time is a thief",
+      "He is a rock"
+    ]
+  },
+  {
+    "id": "personification",
+    "order": 3,
+    "title": "Personification",
+    "definition": "Giving human qualities to non-human things",
+    "examples": [
+      "The wind whispered through the trees",
+      "Opportunity knocked at the door"
+    ]
+  },
+  {
+    "id": "hyperbole",
+    "order": 4,
+    "title": "Hyperbole",
+    "definition": "Deliberate exaggeration for emphasis",
+    "examples": [
+      "I have told you a million times",
+      "This bag weighs a ton"
+    ]
+  },
+  {
+    "id": "alliteration",
+    "order": 5,
+    "title": "Alliteration",
+    "definition": "Repeated consonant sounds at the start of nearby words",
+    "examples": [
+      "Silver seas shimmered softly",
+      "Wild winds whipped westward"
+    ]
+  },
+  {
+    "id": "onomatopoeia",
+    "order": 6,
+    "title": "Onomatopoeia",
+    "definition": "A word that imitates a sound",
+    "examples": [
+      "The bees buzzed above the flowers",
+      "The bacon sizzled in the pan"
+    ]
+  },
+  {
+    "id": "oxymoron",
+    "order": 7,
+    "title": "Oxymoron",
+    "definition": "Two contradictory words placed together",
+    "examples": [
+      "Deafening silence filled the room",
+      "It was a bittersweet farewell"
+    ]
+  }
+]

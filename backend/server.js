@@ -3,6 +3,7 @@ import cors from "cors";
 import express from "express";
 import rateLimit from "express-rate-limit";
 import { aiRoutes } from "./routes/aiRoutes.js";
+import { learningRoutes } from "./routes/learningRoutes.js";
 
 const app = express();
 const PORT = Number.parseInt(process.env.PORT || "5000", 10);
@@ -35,12 +36,13 @@ app.get("/health", (_request, response) => {
 });
 app.use("/api/generate", generateLimiter);
 app.use("/api", aiRoutes);
+app.use("/api/learning", learningRoutes);
 
 app.use((error, _request, response, _next) => {
   console.error("Unhandled backend error.", error);
-  response.status(500).json({
+  response.status(error?.statusCode || 500).json({
     success: false,
-    error: "Unexpected backend error.",
+    error: error?.message || "Unexpected backend error.",
   });
 });
 

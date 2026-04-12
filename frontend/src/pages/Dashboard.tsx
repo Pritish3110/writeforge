@@ -3,6 +3,7 @@ import { getStoredDisplayName } from "@/lib/backend/workspaceSnapshot";
 import { useTaskTracking } from "@/hooks/useTaskTracking";
 import { getDayName } from "@/data/tasks";
 import { useAuth } from "@/contexts/AuthContext";
+import DailyLearningCard from "@/components/DailyLearningCard";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Progress } from "@/components/ui/progress";
@@ -101,6 +102,8 @@ const Dashboard = () => {
           </div>
         </CardContent>
       </Card>
+
+      <DailyLearningCard />
 
       <Button
         onClick={() => navigate("/daily-tasks")}

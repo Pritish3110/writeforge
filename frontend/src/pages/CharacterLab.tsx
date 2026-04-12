@@ -1,11 +1,12 @@
-import { type DragEvent, type KeyboardEvent, type ReactNode, useEffect, useState } from "react";
+import { type DragEvent, type KeyboardEvent, type ReactNode, useEffect, useMemo, useRef, useState } from "react";
+import { useMatch, useNavigate } from "react-router-dom";
 import { useLocalStorage } from "@/hooks/useLocalStorage";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
-import { Collapsible, CollapsibleContent } from "@/components/ui/collapsible";
+import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { cn } from "@/lib/utils";
 import { useDeleteConfirmation } from "@/components/DeleteConfirmationProvider";
@@ -244,12 +245,14 @@ const CharacterField = ({
 );
 
 const CharacterLab = () => {
+  const navigate = useNavigate();
+  const newRouteMatch = useMatch("/character-lab/new");
+  const editRouteMatch = useMatch("/character-lab/:characterId/edit");
+  const profileRouteMatch = useMatch("/character-lab/:characterId");
   const confirmDelete = useDeleteConfirmation();
   const [storedCharacters, setStoredCharacters] = useLocalStorage<unknown[]>("writeforge-characters", buildDefaultCharacters());
   const [editing, setEditing] = useState<Character | null>(null);
-  const [showForm, setShowForm] = useState(false);
   const [additionalOpen, setAdditionalOpen] = useState(false);
-  const [viewingCharacterId, setViewingCharacterId] = useState<string | null>(null);
   const [profileSections, setProfileSections] = useState<Record<ProfileSectionKey, boolean>>(defaultProfileSections());
   const [filterType, setFilterType] = useState<CharacterViewFilter>("All");
   const [searchTerm, setSearchTerm] = useState("");
@@ -257,8 +260,18 @@ const CharacterLab = () => {
   const [dragOverCharacterId, setDragOverCharacterId] = useState<string | null>(null);
   const [removingTraitId, setRemovingTraitId] = useState<string | null>(null);
   const [removingContradictionIndex, setRemovingContradictionIndex] = useState<number | null>(null);
+  const formCardRef = useRef<HTMLDivElement | null>(null);
+  const readerCardRef = useRef<HTMLDivElement | null>(null);
 
-  const characters = syncCharacters(storedCharacters);
+  const isNewRoute = Boolean(newRouteMatch);
+  const editCharacterId = editRouteMatch?.params.characterId ?? null;
+  const profileCharacterId = profileRouteMatch?.params.characterId ?? null;
+  const characters = useMemo(() => syncCharacters(storedCharacters), [storedCharacters]);
+  const activeCharacterId = isNewRoute
+    ? null
+    : editCharacterId ?? profileCharacterId;
+  const showForm = isNewRoute || Boolean(editCharacterId);
+  const viewingCharacterId = activeCharacterId;
   const visibleCharacters = characters.filter((character) => {
     const matchesType = filterType === "All" || character.type === filterType;
     const query = searchTerm.trim().toLowerCase();
@@ -270,26 +283,106 @@ const CharacterLab = () => {
 
     return matchesType && matchesQuery;
   });
-  const viewingCharacter = characters.find((character) => character.id === viewingCharacterId) || null;
+  const viewingCharacter =
+    editRouteMatch ? null : characters.find((character) => character.id === viewingCharacterId) || null;
   const pinnedCount = characters.filter((character) => character.pinned).length;
 
   useEffect(() => {
-    setStoredCharacters((prev) => {
-      const synced = syncCharacters(prev);
-      return JSON.stringify(prev) === JSON.stringify(synced) ? prev : synced;
-    });
-  }, [setStoredCharacters]);
+    const synced = syncCharacters(storedCharacters);
+
+    if (JSON.stringify(storedCharacters) !== JSON.stringify(synced)) {
+      setStoredCharacters(synced);
+    }
+  }, [setStoredCharacters, storedCharacters]);
+
+  useEffect(() => {
+    if (isNewRoute) {
+      setEditing((prev) => {
+        const isUnsavedDraft = prev ? !characters.some((character) => character.id === prev.id) : false;
+        return isUnsavedDraft ? prev : emptyChar();
+      });
+      setAdditionalOpen(false);
+      setRemovingTraitId(null);
+      setRemovingContradictionIndex(null);
+      return;
+    }
+
+    if (editCharacterId) {
+      const target = characters.find((character) => character.id === editCharacterId);
+
+      if (!target) {
+        navigate("/character-lab", { replace: true });
+        return;
+      }
+
+      setEditing(cloneCharacter(target));
+      setAdditionalOpen(false);
+      setRemovingTraitId(null);
+      setRemovingContradictionIndex(null);
+      return;
+    }
+
+    setEditing(null);
+    setRemovingTraitId(null);
+    setRemovingContradictionIndex(null);
+  }, [characters, editCharacterId, isNewRoute, navigate]);
 
   useEffect(() => {
     if (!viewingCharacterId) return;
+    if (editRouteMatch) return;
 
     const stillVisible = visibleCharacters.some((character) => character.id === viewingCharacterId);
 
     if (!stillVisible) {
-      setViewingCharacterId(null);
+      navigate("/character-lab", { replace: true });
       setProfileSections(defaultProfileSections());
     }
-  }, [viewingCharacterId, visibleCharacters]);
+  }, [editRouteMatch, navigate, viewingCharacterId, visibleCharacters]);
+
+  useEffect(() => {
+    if (!profileCharacterId || editCharacterId || isNewRoute) return;
+    if (characters.some((character) => character.id === profileCharacterId)) return;
+
+    navigate("/character-lab", { replace: true });
+  }, [characters, editCharacterId, isNewRoute, navigate, profileCharacterId]);
+
+  useEffect(() => {
+    if (!showForm || !editing || !formCardRef.current) return;
+
+    const formCard = formCardRef.current;
+    const prefersReducedMotion =
+      typeof window !== "undefined" &&
+      window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+
+    const animationFrame = window.requestAnimationFrame(() => {
+      formCard.scrollIntoView({
+        behavior: prefersReducedMotion ? "auto" : "smooth",
+        block: "start",
+      });
+      formCard.focus({ preventScroll: true });
+    });
+
+    return () => window.cancelAnimationFrame(animationFrame);
+  }, [editing?.id, showForm]);
+
+  useEffect(() => {
+    if (!viewingCharacter || editRouteMatch || !readerCardRef.current) return;
+
+    const readerCard = readerCardRef.current;
+    const prefersReducedMotion =
+      typeof window !== "undefined" &&
+      window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+
+    const animationFrame = window.requestAnimationFrame(() => {
+      readerCard.scrollIntoView({
+        behavior: prefersReducedMotion ? "auto" : "smooth",
+        block: "start",
+      });
+      readerCard.focus({ preventScroll: true });
+    });
+
+    return () => window.cancelAnimationFrame(animationFrame);
+  }, [editRouteMatch, viewingCharacter?.id]);
 
   const updateEditing = (update: Partial<Character>) => {
     setEditing((prev) => (prev ? { ...prev, ...update } : prev));
@@ -418,10 +511,9 @@ const CharacterLab = () => {
       return assignCharacterOrder(sortCharacters([...normalized, { ...nextEditing, order: normalized.length }]));
     });
 
-    setViewingCharacterId(nextEditing.id);
+    navigate(`/character-lab/${nextEditing.id}`);
     setProfileSections(defaultProfileSections());
     setEditing(null);
-    setShowForm(false);
     setAdditionalOpen(true);
     setRemovingTraitId(null);
     setRemovingContradictionIndex(null);
@@ -439,13 +531,12 @@ const CharacterLab = () => {
     setStoredCharacters((prev) => assignCharacterOrder(syncCharacters(prev, false).filter((character) => character.id !== id)));
 
     if (viewingCharacterId === id) {
-      setViewingCharacterId(null);
+      navigate("/character-lab", { replace: true });
       setProfileSections(defaultProfileSections());
     }
 
     if (editing?.id === id) {
       setEditing(null);
-      setShowForm(false);
     }
   };
 
@@ -496,30 +587,33 @@ const CharacterLab = () => {
 
   const startNew = () => {
     setEditing(emptyChar());
-    setShowForm(true);
     setAdditionalOpen(false);
     setRemovingTraitId(null);
     setRemovingContradictionIndex(null);
+    navigate("/character-lab/new");
   };
 
   const startEdit = (character: Character) => {
     setEditing(cloneCharacter(character));
-    setShowForm(true);
-    setAdditionalOpen(true);
+    setAdditionalOpen(false);
     setRemovingTraitId(null);
     setRemovingContradictionIndex(null);
+    navigate(`/character-lab/${character.id}/edit`);
   };
 
   const cancel = () => {
+    const fallbackRoute = editing && characters.some((character) => character.id === editing.id)
+      ? `/character-lab/${editing.id}`
+      : "/character-lab";
     setEditing(null);
-    setShowForm(false);
-    setAdditionalOpen(true);
+    setAdditionalOpen(false);
     setRemovingTraitId(null);
     setRemovingContradictionIndex(null);
+    navigate(fallbackRoute);
   };
 
   const toggleViewingCharacter = (id: string) => {
-    setViewingCharacterId((prev) => (prev === id ? null : id));
+    navigate(viewingCharacterId === id && !editRouteMatch ? "/character-lab" : `/character-lab/${id}`);
     setProfileSections(defaultProfileSections());
   };
 
@@ -576,7 +670,7 @@ const CharacterLab = () => {
       </div>
 
       {showForm && editing && (
-        <Card className="glow-card glow-border">
+        <Card ref={formCardRef} tabIndex={-1} className="glow-card glow-border scroll-mt-6 outline-none">
           <CardHeader className="flex flex-row items-center justify-between pb-2">
             <CardTitle className="font-mono text-base">{characters.find((character) => character.id === editing.id) ? "Edit" : "New"} Character</CardTitle>
             <Button variant="ghost" size="icon" onClick={cancel}>
@@ -960,7 +1054,7 @@ const CharacterLab = () => {
       </div>
 
       {viewingCharacter && (
-        <Card className="glow-card glow-border">
+        <Card ref={readerCardRef} tabIndex={-1} className="glow-card glow-border scroll-mt-6 outline-none">
           <CardHeader className="border-b border-border/80 pb-4">
             <div className="flex items-start justify-between gap-4">
               <div className="space-y-1">
