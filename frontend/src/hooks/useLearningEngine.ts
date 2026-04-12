@@ -13,6 +13,10 @@ interface UseLearningEngineOptions {
   loadProgress?: boolean;
 }
 
+const TODAY_LOAD_ERROR = "Unable to load today's practice. Please try again in a moment.";
+const PROGRESS_LOAD_ERROR = "Unable to load your skill insights. Please try again in a moment.";
+const SUBMIT_ERROR = "Unable to save your practice just now. Please try again in a moment.";
+
 export const useLearningEngine = ({
   loadToday = true,
   loadProgress = true,
@@ -35,12 +39,8 @@ export const useLearningEngine = ({
       setToday(payload.today);
       setProgress(payload.progress);
       return payload;
-    } catch (requestError) {
-      setError(
-        requestError instanceof Error
-          ? requestError.message
-          : "Unable to load today’s learning queue.",
-      );
+    } catch {
+      setError(TODAY_LOAD_ERROR);
       return null;
     } finally {
       setLoadingToday(false);
@@ -60,12 +60,8 @@ export const useLearningEngine = ({
       const payload = await fetchLearningProgress();
       setProgress(payload.progress);
       return payload;
-    } catch (requestError) {
-      setError(
-        requestError instanceof Error
-          ? requestError.message
-          : "Unable to load learning progress.",
-      );
+    } catch {
+      setError(PROGRESS_LOAD_ERROR);
       return null;
     } finally {
       setLoadingProgress(false);
@@ -101,12 +97,8 @@ export const useLearningEngine = ({
         }
 
         return payload;
-      } catch (requestError) {
-        setError(
-          requestError instanceof Error
-            ? requestError.message
-            : "Unable to submit learning feedback.",
-        );
+      } catch {
+        setError(SUBMIT_ERROR);
         return null;
       } finally {
         setSubmittingTopicId(null);

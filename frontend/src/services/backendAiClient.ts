@@ -1,11 +1,9 @@
 import { auth } from "@/firebase/auth";
+import { buildApiUrl } from "@/services/apiBase";
 
 /**
  * Backend AI Service - Calls the Express backend for AI operations.
  */
-const DEFAULT_BACKEND_URL = "http://localhost:8787";
-const BACKEND_URL = import.meta.env.VITE_API_URL?.trim() || DEFAULT_BACKEND_URL;
-
 export interface GenerateTextRequest {
   prompt: string;
   model?: string;
@@ -45,7 +43,7 @@ export const callBackendAI = async (
   request: GenerateTextRequest
 ): Promise<GenerateTextResponse> => {
   try {
-    const response = await fetch(`${BACKEND_URL}/api/generate`, {
+    const response = await fetch(buildApiUrl("/api/generate"), {
       method: "POST",
       headers: await createBackendHeaders(),
       body: JSON.stringify(request),
@@ -74,7 +72,7 @@ export const callBackendAI = async (
  */
 export const checkAIServiceHealth = async (): Promise<boolean> => {
   try {
-    const response = await fetch(`${BACKEND_URL}/health`);
+    const response = await fetch(buildApiUrl("/health"));
     return response.ok;
   } catch (error) {
     console.warn("AI service health check failed:", error);

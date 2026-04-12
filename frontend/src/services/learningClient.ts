@@ -1,8 +1,6 @@
 import { auth } from "@/firebase/auth";
 import { readStoredBackendUser } from "@/lib/backend/workspaceSnapshot";
-
-const DEFAULT_BACKEND_URL = "http://localhost:5000";
-const BACKEND_URL = import.meta.env.VITE_API_URL?.trim() || DEFAULT_BACKEND_URL;
+import { buildApiUrl } from "@/services/apiBase";
 
 export type LearningPerformance = "again" | "hard" | "good" | "easy";
 export type LearningStage = "learn" | "recognize" | "apply" | "mastered";
@@ -154,7 +152,7 @@ const readJson = async <T,>(response: Response): Promise<T> => {
 };
 
 export const fetchLearningToday = async (): Promise<LearningTodayResponse> => {
-  const response = await fetch(`${BACKEND_URL}/api/learning/today`, {
+  const response = await fetch(buildApiUrl("/api/learning/today"), {
     headers: await createLearningHeaders(),
   });
 
@@ -162,7 +160,7 @@ export const fetchLearningToday = async (): Promise<LearningTodayResponse> => {
 };
 
 export const fetchLearningProgress = async (): Promise<LearningProgressResponse> => {
-  const response = await fetch(`${BACKEND_URL}/api/learning/progress`, {
+  const response = await fetch(buildApiUrl("/api/learning/progress"), {
     headers: await createLearningHeaders(),
   });
 
@@ -173,7 +171,7 @@ export const submitLearningPerformance = async (
   topicId: string,
   performance: LearningPerformance,
 ): Promise<LearningSubmitResponse> => {
-  const response = await fetch(`${BACKEND_URL}/api/learning/submit`, {
+  const response = await fetch(buildApiUrl("/api/learning/submit"), {
     method: "POST",
     headers: await createLearningHeaders(),
     body: JSON.stringify({

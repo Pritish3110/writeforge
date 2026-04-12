@@ -3,7 +3,7 @@ import { useTaskTracking } from "@/hooks/useTaskTracking";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { LineChart, Line, BarChart, Bar, XAxis, YAxis, ResponsiveContainer, Tooltip } from "recharts";
-import { BrainCircuit, Flame, Trophy } from "lucide-react";
+import { BrainCircuit, Flame, Sparkles, Trophy } from "lucide-react";
 
 const Analytics = () => {
   const { getLast7Days, getLast28Days, getStreak, getCategoryStats } = useTaskTracking();
@@ -13,13 +13,26 @@ const Analytics = () => {
   const last28 = getLast28Days();
   const streak = getStreak();
   const catStats = getCategoryStats();
+  const learnedConcepts = learningProgress?.topicsCompleted || 0;
+  const totalConcepts = learningProgress?.totalTopics || 0;
+  const weeklyLearningActivity =
+    learningProgress?.heatmap?.slice(-7).reduce((sum, cell) => sum + cell.count, 0) || 0;
+  const improvingThemes =
+    learningProgress?.themes
+      ?.filter((theme) => theme.masteredTopics > 0 || theme.status === "in_progress")
+      .slice(0, 2)
+      .map((theme) => theme.title) || [];
+  const nextFocusTopic = learningProgress?.weakTopics?.[0] || null;
+  const activeSkillTrack = learningProgress?.activeTheme?.title || "Writing craft";
+  const suggestionCopy = nextFocusTopic
+    ? `You're close to mastering ${nextFocusTopic.title.toLowerCase()}. Practice a few more examples to improve.`
+    : `Keep practicing ${activeSkillTrack.toLowerCase()} to build stronger instincts.`;
 
   const completionRate = last7.map((d) => ({
     ...d,
     rate: d.total > 0 ? Math.round((d.completed / d.total) * 100) : 0,
   }));
 
-  // Simple heatmap for last 28 days
   const heatmap = last28.map((dayData) => ({
     date: dayData.date,
     level:
@@ -130,10 +143,10 @@ const Analytics = () => {
                     cell.level === 0
                       ? "hsl(var(--muted))"
                       : cell.level === 1
-                      ? "hsl(var(--neon-purple) / 0.3)"
-                      : cell.level === 2
-                      ? "hsl(var(--neon-purple) / 0.6)"
-                      : "hsl(var(--neon-purple))",
+                        ? "hsl(var(--neon-purple) / 0.3)"
+                        : cell.level === 2
+                          ? "hsl(var(--neon-purple) / 0.6)"
+                          : "hsl(var(--neon-purple))",
                 }}
               />
             ))}
@@ -157,19 +170,16 @@ const Analytics = () => {
 
       <div className="space-y-4">
         <div>
-          <h2 className="text-xl font-semibold tracking-tight">Learning Engine Analytics</h2>
-          <p className="mt-1 font-mono text-sm text-muted-foreground">
-            Track spaced repetition streaks, weak-area reinforcement, and theme progression.
+          <h2 className="text-xl font-semibold tracking-tight">Skill Builder Insights</h2>
+          <p className="mt-1 text-sm text-muted-foreground">
+            A clear view of what you're strengthening and where to focus next.
           </p>
         </div>
 
         {learningError ? (
-          <Card className="glow-card glow-border border-dashed bg-muted/10">
+          <Card className="glow-card glow-border">
             <CardContent className="py-6">
               <p className="text-sm text-muted-foreground">{learningError}</p>
-              <p className="mt-2 text-xs font-mono text-muted-foreground">
-                Start the backend learning routes to unlock these analytics.
-              </p>
             </CardContent>
           </Card>
         ) : null}
@@ -178,44 +188,46 @@ const Analytics = () => {
           <Card className="glow-card glow-border">
             <CardHeader className="pb-2">
               <CardTitle className="text-sm font-mono text-muted-foreground flex items-center gap-2">
-                <BrainCircuit className="h-4 w-4 text-neon-cyan" /> Learning Streak
+                <BrainCircuit className="h-4 w-4 text-neon-cyan" /> Concepts Learned
               </CardTitle>
             </CardHeader>
             <CardContent>
               <p className="text-4xl font-bold font-mono text-neon-cyan">
-                {loadingProgress ? "..." : learningProgress?.streak.current || 0}
+                {loadingProgress ? "..." : learnedConcepts}
+                <span className="text-lg text-muted-foreground">/{totalConcepts}</span>
               </p>
               <p className="text-xs text-muted-foreground">
-                longest {learningProgress?.streak.longest || 0} day
-                {(learningProgress?.streak.longest || 0) === 1 ? "" : "s"}
+                steadily building your writing toolkit
               </p>
             </CardContent>
           </Card>
 
           <Card className="glow-card glow-border">
             <CardHeader className="pb-2">
-              <CardTitle className="text-sm font-mono text-muted-foreground">Topics Mastered</CardTitle>
+              <CardTitle className="text-sm font-mono text-muted-foreground">Practice Streak</CardTitle>
             </CardHeader>
             <CardContent>
               <p className="text-4xl font-bold font-mono text-neon-purple">
-                {loadingProgress ? "..." : learningProgress?.topicsCompleted || 0}
+                {loadingProgress ? "..." : learningProgress?.streak.current || 0}
               </p>
               <p className="text-xs text-muted-foreground">
-                of {learningProgress?.totalTopics || 0} topics in the current curriculum
+                {loadingProgress
+                  ? "tracking your consistency"
+                  : `best run: ${learningProgress?.streak.longest || 0} day${(learningProgress?.streak.longest || 0) === 1 ? "" : "s"}`}
               </p>
             </CardContent>
           </Card>
 
           <Card className="glow-card glow-border">
             <CardHeader className="pb-2">
-              <CardTitle className="text-sm font-mono text-muted-foreground">Reviews Due Today</CardTitle>
+              <CardTitle className="text-sm font-mono text-muted-foreground">Activity</CardTitle>
             </CardHeader>
             <CardContent>
               <p className="text-4xl font-bold font-mono text-neon-pink">
-                {loadingProgress ? "..." : learningProgress?.dueToday || 0}
+                {loadingProgress ? "..." : weeklyLearningActivity}
               </p>
               <p className="text-xs text-muted-foreground">
-                queued for the next learning session
+                practice step{weeklyLearningActivity === 1 ? "" : "s"} completed this week
               </p>
             </CardContent>
           </Card>
@@ -225,114 +237,59 @@ const Analytics = () => {
           <Card className="glow-card glow-border">
             <CardHeader>
               <CardTitle className="text-sm font-mono text-muted-foreground">
-                Theme Progression
+                Focus Area
               </CardTitle>
             </CardHeader>
             <CardContent className="space-y-4">
-              {learningProgress?.themes?.length ? (
-                learningProgress.themes.map((theme) => {
-                  const completionRate =
-                    theme.totalTopics > 0
-                      ? (theme.masteredTopics / theme.totalTopics) * 100
-                      : 0;
+              <div className="rounded-xl border border-border bg-muted/20 p-4">
+                <p className="text-sm font-medium">You're improving in</p>
+                {improvingThemes.length > 0 ? (
+                  <div className="mt-3 flex flex-wrap gap-2">
+                    {improvingThemes.map((theme) => (
+                      <Badge key={theme} variant="secondary">
+                        {theme}
+                      </Badge>
+                    ))}
+                  </div>
+                ) : (
+                  <p className="mt-2 text-sm text-muted-foreground">
+                    Your first practice wins will start showing up here.
+                  </p>
+                )}
+              </div>
 
-                  return (
-                    <div key={theme.id} className="rounded-xl border border-border bg-muted/20 p-4">
-                      <div className="flex flex-wrap items-center justify-between gap-2">
-                        <div>
-                          <p className="font-medium">{theme.title}</p>
-                          <p className="mt-1 text-xs font-mono text-muted-foreground">
-                            {theme.masteredTopics}/{theme.totalTopics} mastered
-                          </p>
-                        </div>
-                        <Badge variant="outline" className="font-mono text-[11px] uppercase">
-                          {theme.status.replace("_", " ")}
-                        </Badge>
-                      </div>
-                      <div className="mt-3 h-2 rounded-full bg-muted">
-                        <div
-                          className="h-full rounded-full bg-neon-cyan"
-                          style={{ width: `${completionRate}%` }}
-                        />
-                      </div>
-                    </div>
-                  );
-                })
-              ) : (
-                <p className="text-sm text-muted-foreground">
-                  No learning theme data yet.
+              <div className="rounded-xl border border-border bg-muted/20 p-4">
+                <p className="text-sm font-medium">Needs more practice</p>
+                <p className="mt-2 text-sm text-muted-foreground">
+                  {nextFocusTopic?.title || activeSkillTrack}
                 </p>
-              )}
+              </div>
             </CardContent>
           </Card>
 
           <Card className="glow-card glow-border">
             <CardHeader>
               <CardTitle className="text-sm font-mono text-muted-foreground">
-                Weak Area Reinforcement
+                Suggested Focus
               </CardTitle>
             </CardHeader>
-            <CardContent className="space-y-3">
-              {learningProgress?.weakTopics?.length ? (
-                learningProgress.weakTopics.map((topic) => (
-                  <div key={topic.topicId} className="rounded-xl border border-border bg-muted/20 p-4">
-                    <div className="flex flex-wrap items-center justify-between gap-2">
-                      <div>
-                        <p className="font-medium">{topic.title}</p>
-                        <p className="mt-1 text-xs font-mono text-muted-foreground">
-                          {topic.themeTitle} • stage {topic.stage}
-                        </p>
-                      </div>
-                      <Badge variant="outline" className="font-mono text-[11px]">
-                        Again {topic.againCount} • Hard {topic.hardCount}
-                      </Badge>
-                    </div>
-                    <p className="mt-3 text-sm text-muted-foreground">
-                      {topic.recommendation}
+            <CardContent>
+              <div className="rounded-xl border border-border bg-muted/20 p-4">
+                <div className="flex items-start gap-3">
+                  <div className="rounded-2xl bg-neon-cyan/10 p-3 text-neon-cyan">
+                    <Sparkles className="h-5 w-5" />
+                  </div>
+                  <div>
+                    <p className="text-sm font-medium">A gentle next step</p>
+                    <p className="mt-2 text-sm leading-6 text-muted-foreground">
+                      {suggestionCopy}
                     </p>
                   </div>
-                ))
-              ) : (
-                <p className="text-sm text-muted-foreground">
-                  No weak areas flagged right now. Keep reviewing to build a stronger signal.
-                </p>
-              )}
+                </div>
+              </div>
             </CardContent>
           </Card>
         </div>
-
-        <Card className="glow-card glow-border">
-          <CardHeader>
-            <CardTitle className="text-sm font-mono text-muted-foreground">
-              Learning Activity Heatmap
-            </CardTitle>
-          </CardHeader>
-          <CardContent>
-            <div className="flex flex-wrap gap-1">
-              {learningProgress?.heatmap?.length ? (
-                learningProgress.heatmap.map((cell) => (
-                  <div
-                    key={cell.date}
-                    title={`${cell.date} · ${cell.count} review${cell.count === 1 ? "" : "s"}`}
-                    className="h-6 w-6 rounded-sm"
-                    style={{
-                      backgroundColor:
-                        cell.level === 0
-                          ? "hsl(var(--muted))"
-                          : cell.level === 1
-                            ? "hsl(var(--neon-cyan) / 0.3)"
-                            : cell.level === 2
-                              ? "hsl(var(--neon-cyan) / 0.6)"
-                              : "hsl(var(--neon-cyan))",
-                    }}
-                  />
-                ))
-              ) : (
-                <p className="text-sm text-muted-foreground">No learning activity yet.</p>
-              )}
-            </div>
-          </CardContent>
-        </Card>
       </div>
     </div>
   );

@@ -1,4 +1,4 @@
-import { useMemo, useState } from "react";
+import { useMemo, useRef, useState } from "react";
 import { useLearningEngine } from "@/hooks/useLearningEngine";
 import { cn } from "@/lib/utils";
 import { Badge } from "@/components/ui/badge";
@@ -12,19 +12,26 @@ import {
   type LearningWritePayload,
   type LearningMcqPayload,
 } from "@/services/learningClient";
-import { BrainCircuit, RefreshCw } from "lucide-react";
+import { ArrowRight, BrainCircuit, Flame, RefreshCw, Sparkles } from "lucide-react";
 
 const performanceOptions: Array<{
   value: LearningPerformance;
   label: string;
 }> = [
-  { value: "again", label: "Again" },
-  { value: "hard", label: "Hard" },
-  { value: "good", label: "Good" },
+  { value: "again", label: "Needs Work" },
+  { value: "hard", label: "Keep Going" },
+  { value: "good", label: "Solid" },
   { value: "easy", label: "Easy" },
 ];
 
-const getQueueKey = (item: LearningQueueItem, prefix: string) => `${prefix}:${item.topicId}`;
+const stageLabel: Record<LearningQueueItem["stage"], string> = {
+  learn: "Discover",
+  recognize: "Recognize",
+  apply: "Use In Writing",
+  mastered: "Mastered",
+};
+
+const getQueueKey = (item: LearningQueueItem) => `${item.stage}:${item.topicId}`;
 
 const DailyLearningCard = () => {
   const {
@@ -38,10 +45,39 @@ const DailyLearningCard = () => {
   } = useLearningEngine();
   const [selectedAnswers, setSelectedAnswers] = useState<Record<string, string>>({});
   const [writtenResponses, setWrittenResponses] = useState<Record<string, string>>({});
-  const reviewItems = useMemo(
+  const practicePanelRef = useRef<HTMLDivElement | null>(null);
+  const practiceItems = useMemo(
     () => [today?.new, ...(today?.reviews || []), today?.application].filter(Boolean) as LearningQueueItem[],
     [today],
   );
+  const featuredItem = practiceItems[0] || null;
+  const upcomingItems = practiceItems.slice(1, 3);
+  const suggestedFocus =
+    progress?.weakTopics?.[0]?.recommendation ||
+    (today?.theme?.title
+      ? `Keep building your ${today.theme.title.toLowerCase()} skills with one focused practice round today.`
+      : "A short focused practice round will keep your momentum moving.");
+  const quickTaskLabel = featuredItem
+    ? featuredItem.payload.type === "write"
+      ? (featuredItem.payload as LearningWritePayload).prompt
+      : featuredItem.payload.type === "mcq"
+        ? (featuredItem.payload as LearningMcqPayload).question
+        : `Review ${featuredItem.title} and try one fresh example in your own words.`
+    : "You're all caught up for today.";
+
+  const scrollToPractice = () => {
+    if (!practicePanelRef.current) return;
+
+    const prefersReducedMotion =
+      typeof window !== "undefined" &&
+      window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+
+    practicePanelRef.current.scrollIntoView({
+      behavior: prefersReducedMotion ? "auto" : "smooth",
+      block: "start",
+    });
+    practicePanelRef.current.focus({ preventScroll: true });
+  };
 
   const renderPerformanceButtons = (
     item: LearningQueueItem,
@@ -56,9 +92,9 @@ const DailyLearningCard = () => {
           size="sm"
           disabled={disabled || submittingTopicId === item.topicId}
           className={cn(
-            "font-mono",
-            (option.value === "good" || option.value === "easy") &&
-              "bg-neon-purple hover:bg-neon-purple/90",
+            option.value === "good" || option.value === "easy"
+              ? "bg-neon-purple hover:bg-neon-purple/90"
+              : "",
           )}
           onClick={() => void submitPerformance(item.topicId, option.value)}
         >
@@ -68,24 +104,25 @@ const DailyLearningCard = () => {
     </div>
   );
 
-  const renderQueueItem = (item: LearningQueueItem, label: string) => {
-    const queueKey = getQueueKey(item, label);
+  const renderPracticeItem = (item: LearningQueueItem) => {
+    const queueKey = getQueueKey(item);
 
     return (
-      <div key={queueKey} className="rounded-xl border border-border/70 bg-muted/20 p-4">
-        <div className="flex flex-wrap items-center justify-between gap-2">
+      <div
+        key={queueKey}
+        className="rounded-[1.25rem] border border-border/70 bg-background/40 p-5 shadow-[0_16px_40px_-32px_hsl(var(--foreground)/0.85)]"
+      >
+        <div className="flex flex-wrap items-center justify-between gap-3">
           <div>
-            <p className="font-mono text-[11px] uppercase tracking-[0.18em] text-neon-cyan">
-              {label}
+            <p className="text-xs uppercase tracking-[0.18em] text-neon-cyan">
+              {item.themeTitle}
             </p>
-            <h3 className="mt-1 text-lg font-semibold">{item.title}</h3>
+            <h3 className="mt-2 text-xl font-semibold tracking-tight">{item.title}</h3>
           </div>
-          <Badge variant="outline" className="font-mono text-[11px] uppercase tracking-[0.14em]">
-            {item.stage}
+          <Badge variant="outline" className="text-[11px] uppercase tracking-[0.14em]">
+            {stageLabel[item.stage]}
           </Badge>
         </div>
-
-        <p className="mt-2 text-xs font-mono text-muted-foreground">{item.themeTitle}</p>
 
         {item.payload.type === "learn" ? (
           <div className="mt-4 space-y-3">
@@ -94,13 +131,13 @@ const DailyLearningCard = () => {
             </p>
             <div className="flex flex-wrap gap-2">
               {item.payload.data.examples.map((example) => (
-                <Badge key={example} variant="secondary" className="font-mono text-[11px]">
+                <Badge key={example} variant="secondary" className="text-[11px]">
                   {example}
                 </Badge>
               ))}
             </div>
-            <p className="text-xs text-muted-foreground">
-              Rate how secure this concept feels right now.
+            <p className="text-sm text-muted-foreground">
+              Mark how confident this feels before you move on.
             </p>
             {renderPerformanceButtons(item)}
           </div>
@@ -136,9 +173,9 @@ const DailyLearningCard = () => {
               })}
             </div>
             {selectedAnswers[queueKey] ? (
-              <p className="text-xs text-muted-foreground">
+              <p className="text-sm text-muted-foreground">
                 {selectedAnswers[queueKey] === (item.payload as LearningMcqPayload).answerId
-                  ? "Correct. Now mark how easily you recognized it."
+                  ? "Nice work. Mark how comfortable that felt."
                   : `Correct answer: ${
                       (item.payload as LearningMcqPayload).options.find(
                         (option) => option.id === (item.payload as LearningMcqPayload).answerId,
@@ -155,7 +192,7 @@ const DailyLearningCard = () => {
             <p className="text-sm leading-7 text-muted-foreground">
               {(item.payload as LearningWritePayload).prompt}
             </p>
-            <p className="text-xs text-muted-foreground">
+            <p className="text-sm text-muted-foreground">
               {(item.payload as LearningWritePayload).guidance}
             </p>
             <Textarea
@@ -169,10 +206,7 @@ const DailyLearningCard = () => {
               placeholder={`Draft a sentence using ${item.title}...`}
               className="min-h-[110px]"
             />
-            {renderPerformanceButtons(
-              item,
-              !(writtenResponses[queueKey] || "").trim(),
-            )}
+            {renderPerformanceButtons(item, !(writtenResponses[queueKey] || "").trim())}
           </div>
         ) : null}
       </div>
@@ -183,9 +217,9 @@ const DailyLearningCard = () => {
     return (
       <Card className="glow-card glow-border">
         <CardHeader>
-          <CardTitle className="flex items-center gap-2 font-mono text-base">
+          <CardTitle className="flex items-center gap-2 text-base">
             <BrainCircuit className="h-4 w-4 text-neon-cyan" />
-            Learning Engine
+            Skill Builder
           </CardTitle>
         </CardHeader>
         <CardContent className="space-y-3">
@@ -202,19 +236,19 @@ const DailyLearningCard = () => {
       <CardHeader className="space-y-4">
         <div className="flex flex-col gap-3 md:flex-row md:items-start md:justify-between">
           <div>
-            <CardTitle className="flex items-center gap-2 font-mono text-base">
+            <CardTitle className="flex items-center gap-2 text-base">
               <BrainCircuit className="h-4 w-4 text-neon-cyan" />
-              Learning Engine
+              Skill Builder
             </CardTitle>
             <p className="mt-1 text-sm text-muted-foreground">
-              Controlled repetition, stage-based practice, and weak-area reinforcement.
+              Build stronger writing instincts with one focused practice step at a time.
             </p>
           </div>
           <Button
             type="button"
             variant="ghost"
             size="sm"
-            className="font-mono"
+            className="shrink-0"
             onClick={() => void refreshToday()}
           >
             <RefreshCw className="h-4 w-4" />
@@ -222,50 +256,91 @@ const DailyLearningCard = () => {
           </Button>
         </div>
 
-        <div className="flex flex-wrap gap-2">
-          <Badge variant="outline" className="font-mono text-[11px]">
-            Theme: {today?.theme?.title || "Figures Of Speech"}
-          </Badge>
-          <Badge variant="outline" className="font-mono text-[11px]">
-            Due Today: {progress?.dueToday || 0}
-          </Badge>
-          <Badge variant="outline" className="font-mono text-[11px]">
-            Learning Streak: {progress?.streak.current || 0} day
-            {(progress?.streak.current || 0) === 1 ? "" : "s"}
-          </Badge>
+        <div className="grid gap-3 md:grid-cols-3">
+          <div className="rounded-[1.25rem] border border-border/70 bg-background/35 p-4">
+            <p className="text-xs uppercase tracking-[0.18em] text-muted-foreground">Today's Focus</p>
+            <p className="mt-2 text-lg font-semibold tracking-tight">
+              {featuredItem?.title || today?.theme?.title || "Daily writing craft"}
+            </p>
+            <p className="mt-2 text-sm text-muted-foreground">
+              {featuredItem?.themeTitle || "A short creative practice to keep your skills sharp."}
+            </p>
+          </div>
+
+          <div className="rounded-[1.25rem] border border-border/70 bg-background/35 p-4">
+            <p className="text-xs uppercase tracking-[0.18em] text-muted-foreground">Quick Task</p>
+            <p className="mt-2 text-sm leading-6 text-foreground">{quickTaskLabel}</p>
+          </div>
+
+          <div className="rounded-[1.25rem] border border-border/70 bg-background/35 p-4">
+            <div className="flex items-center gap-2 text-xs uppercase tracking-[0.18em] text-muted-foreground">
+              <Flame className="h-3.5 w-3.5 text-neon-pink" />
+              Streak
+            </div>
+            <p className="mt-2 text-3xl font-semibold tracking-tight">
+              {progress?.streak.current || 0}
+              <span className="ml-2 text-base text-muted-foreground">
+                day{(progress?.streak.current || 0) === 1 ? "" : "s"}
+              </span>
+            </p>
+            <p className="mt-2 text-sm text-muted-foreground">{suggestedFocus}</p>
+          </div>
         </div>
       </CardHeader>
 
       <CardContent className="space-y-4">
         {error ? (
-          <div className="rounded-xl border border-dashed border-border/70 bg-muted/20 p-4">
-            <p className="text-sm text-muted-foreground">
-              {error}
-            </p>
-            <p className="mt-2 text-xs font-mono text-muted-foreground">
-              Start the backend to load the daily learning queue.
-            </p>
+          <div className="rounded-[1.25rem] border border-border/70 bg-background/35 p-5">
+            <p className="text-sm text-muted-foreground">{error}</p>
           </div>
         ) : null}
 
-        {reviewItems.length > 0 ? (
-          reviewItems.map((item, index) =>
-            renderQueueItem(
-              item,
-              index === 0 && today?.new?.topicId === item.topicId
-                ? "New Concept"
-                : today?.application?.topicId === item.topicId && index === reviewItems.length - 1
-                  ? "Application Task"
-                  : "Review",
-            ),
-          )
-        ) : (
-          <div className="rounded-xl border border-dashed border-border/70 bg-muted/20 p-4">
-            <p className="text-sm text-muted-foreground">
-              No learning items are due right now. Come back after your next review window opens.
+        {!error && featuredItem ? (
+          <div className="space-y-4">
+            <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
+              <div className="space-y-1">
+                <div className="flex items-center gap-2 text-xs uppercase tracking-[0.18em] text-neon-cyan">
+                  <Sparkles className="h-3.5 w-3.5" />
+                  Start Practice
+                </div>
+                <p className="text-sm text-muted-foreground">
+                  One short session is enough to keep today’s momentum going.
+                </p>
+              </div>
+              <Button
+                type="button"
+                onClick={scrollToPractice}
+                className="bg-neon-purple hover:bg-neon-purple/90"
+              >
+                Start Practice
+                <ArrowRight className="h-4 w-4" />
+              </Button>
+            </div>
+
+            {upcomingItems.length > 0 ? (
+              <div className="flex flex-wrap gap-2">
+                {upcomingItems.map((item) => (
+                  <Badge key={item.topicId} variant="outline" className="text-[11px] uppercase tracking-[0.14em]">
+                    Next: {item.title}
+                  </Badge>
+                ))}
+              </div>
+            ) : null}
+
+            <div ref={practicePanelRef} tabIndex={-1} className="scroll-mt-6 outline-none">
+              {renderPracticeItem(featuredItem)}
+            </div>
+          </div>
+        ) : null}
+
+        {!error && !featuredItem ? (
+          <div className="rounded-[1.25rem] border border-border/70 bg-background/35 p-5">
+            <p className="text-base font-medium">You're all caught up for today</p>
+            <p className="mt-2 text-sm text-muted-foreground">
+              Come back tomorrow to continue building your skills.
             </p>
           </div>
-        )}
+        ) : null}
       </CardContent>
     </Card>
   );

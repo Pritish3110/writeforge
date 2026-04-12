@@ -7,11 +7,18 @@ import { learningRoutes } from "./routes/learningRoutes.js";
 
 const app = express();
 const PORT = Number.parseInt(process.env.PORT || "5000", 10);
-const DEFAULT_FRONTEND_URL = "http://localhost:5173";
-const allowedOrigins = (process.env.FRONTEND_URL || DEFAULT_FRONTEND_URL)
-  .split(",")
-  .map((origin) => origin.trim())
-  .filter(Boolean);
+const DEFAULT_FRONTEND_ORIGINS = ["http://localhost:5173", "http://localhost:8080", "http://127.0.0.1:5173", "http://127.0.0.1:8080", "https://writer-z.vercel.app", "https://writerz.vercel.app"];
+const allowedOrigins = Array.from(
+  new Set(
+    [
+      ...DEFAULT_FRONTEND_ORIGINS,
+      ...(process.env.FRONTEND_URL || "")
+        .split(",")
+        .map((origin) => origin.trim())
+        .filter(Boolean),
+    ],
+  ),
+);
 const generateLimiter = rateLimit({
   windowMs: 60 * 1000,
   max: 10,
@@ -25,7 +32,14 @@ const generateLimiter = rateLimit({
 
 app.use(
   cors({
-    origin: allowedOrigins.length === 1 ? allowedOrigins[0] : allowedOrigins,
+    origin: (origin, callback) => {
+      if (!origin || allowedOrigins.includes(origin)) {
+        callback(null, true);
+        return;
+      }
+
+      callback(new Error(`Origin ${origin} is not allowed by CORS.`));
+    },
     credentials: true,
   }),
 );
