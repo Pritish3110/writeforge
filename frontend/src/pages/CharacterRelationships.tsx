@@ -2,6 +2,7 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { useLocalStorage } from "@/hooks/useLocalStorage";
 import {
   CHARACTER_RELATIONSHIP_STORAGE_KEY,
+  CHARACTER_RELATIONSHIP_TEMPLATE_STORAGE_KEY,
   RELATIONSHIP_TYPES,
   createRelationshipFormState,
   createTimelineEntry,
@@ -9,7 +10,9 @@ import {
   isSameRelationshipPair,
   normalizeCharacterRelationships,
   normalizeRelationshipCharacters,
+  normalizeRelationshipGraphTemplates,
   type CharacterRelationship,
+  type RelationshipGraphTemplate,
   type RelationshipCharacter,
   type RelationshipFormState,
   type RelationshipTimelineEntry,
@@ -19,14 +22,26 @@ import { cn } from "@/lib/utils";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Checkbox } from "@/components/ui/checkbox";
+import {
+  Command,
+  CommandEmpty,
+  CommandInput,
+  CommandItem,
+  CommandList,
+} from "@/components/ui/command";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Slider } from "@/components/ui/slider";
 import { Textarea } from "@/components/ui/textarea";
 import { toast } from "@/components/ui/sonner";
 import { useDeleteConfirmation } from "@/components/DeleteConfirmationProvider";
 import {
+  Check,
+  ChevronsUpDown,
+  LayoutTemplate,
   GitFork,
   Minus,
   Plus,
@@ -44,6 +59,7 @@ const GRAPH_WIDTH = 1000;
 const GRAPH_HEIGHT = 620;
 const NODE_HALF_WIDTH = 74;
 const NODE_HALF_HEIGHT = 34;
+const TEMPLATE_VISIBLE_CHARACTER_LIMIT = 6;
 
 const clamp = (value: number, min: number, max: number) =>
   Math.min(Math.max(value, min), max);
@@ -92,10 +108,18 @@ const CharacterRelationships = () => {
     CHARACTER_RELATIONSHIP_STORAGE_KEY,
     [],
   );
+  const [storedTemplates, setStoredTemplates] = useLocalStorage<unknown[]>(
+    CHARACTER_RELATIONSHIP_TEMPLATE_STORAGE_KEY,
+    [],
+  );
   const [selectedCharacterId, setSelectedCharacterId] = useState<string | null>(null);
   const [draggingNodeId, setDraggingNodeId] = useState<string | null>(null);
   const [zoom, setZoom] = useState(1);
   const [nodePositions, setNodePositions] = useState<Record<string, GraphPosition>>({});
+  const [templateTitle, setTemplateTitle] = useState("");
+  const [templateCharacterIds, setTemplateCharacterIds] = useState<string[]>([]);
+  const [editingTemplateId, setEditingTemplateId] = useState<string | null>(null);
+  const [isTemplateCharacterPickerOpen, setIsTemplateCharacterPickerOpen] = useState(false);
 
   const characters = useMemo(
     () => normalizeRelationshipCharacters(storedCharacters),
@@ -104,6 +128,10 @@ const CharacterRelationships = () => {
   const relationships = useMemo(
     () => normalizeCharacterRelationships(storedRelationships),
     [storedRelationships],
+  );
+  const relationshipTemplates = useMemo(
+    () => normalizeRelationshipGraphTemplates(storedTemplates),
+    [storedTemplates],
   );
   const characterMap = useMemo(
     () => new Map(characters.map((character) => [character.id, character])),
@@ -121,25 +149,56 @@ const CharacterRelationships = () => {
   const [form, setForm] = useState<RelationshipFormState>(() =>
     createRelationshipFormState(characters),
   );
+  const draftGraphRelationships = useMemo(
+    () =>
+      visibleRelationships.filter(
+        (relationship) =>
+          templateCharacterIds.includes(relationship.characterAId) &&
+          templateCharacterIds.includes(relationship.characterBId),
+      ),
+    [templateCharacterIds, visibleRelationships],
+  );
+  const graphRelationships = useMemo(
+    () =>
+      draftGraphRelationships.filter(
+        (relationship) =>
+          characterMap.has(relationship.characterAId) &&
+          characterMap.has(relationship.characterBId),
+      ),
+    [characterMap, draftGraphRelationships],
+  );
+  const graphCharacters = useMemo(() => {
+    const orderMap = new Map(
+      templateCharacterIds.map((characterId, index) => [characterId, index]),
+    );
+
+    return characters
+      .filter((character) => templateCharacterIds.includes(character.id))
+      .sort(
+        (left, right) =>
+          (orderMap.get(left.id) ?? Number.MAX_SAFE_INTEGER) -
+          (orderMap.get(right.id) ?? Number.MAX_SAFE_INTEGER),
+      );
+  }, [characters, templateCharacterIds]);
 
   useEffect(() => {
     setNodePositions((prev) => {
-      const fallback = buildDefaultPositions(characters);
+      const fallback = buildDefaultPositions(graphCharacters);
       const next: Record<string, GraphPosition> = {};
 
-      characters.forEach((character) => {
+      graphCharacters.forEach((character) => {
         next[character.id] = prev[character.id] || fallback[character.id];
       });
 
       return next;
     });
-  }, [characters]);
+  }, [graphCharacters]);
 
   useEffect(() => {
-    if (!selectedCharacterId || !characterMap.has(selectedCharacterId)) {
-      setSelectedCharacterId(characters[0]?.id || null);
+    if (!selectedCharacterId || !graphCharacters.some((character) => character.id === selectedCharacterId)) {
+      setSelectedCharacterId(graphCharacters[0]?.id || null);
     }
-  }, [selectedCharacterId, characterMap, characters]);
+  }, [selectedCharacterId, graphCharacters]);
 
   useEffect(() => {
     setForm((prev) => {
@@ -156,6 +215,14 @@ const CharacterRelationships = () => {
 
       return next;
     });
+  }, [characters]);
+
+  useEffect(() => {
+    const availableIds = new Set(characters.map((character) => character.id));
+
+    setTemplateCharacterIds((prev) =>
+      prev.filter((characterId) => availableIds.has(characterId)),
+    );
   }, [characters]);
 
   useEffect(() => {
@@ -198,20 +265,131 @@ const CharacterRelationships = () => {
 
   const selectedCharacter =
     (selectedCharacterId ? characterMap.get(selectedCharacterId) : null) || null;
-  const selectedCharacterRelationships = visibleRelationships.filter(
+  const selectedCharacterRelationships = graphRelationships.filter(
     (relationship) =>
       relationship.characterAId === selectedCharacterId ||
       relationship.characterBId === selectedCharacterId,
   );
   const averageStrength =
-    visibleRelationships.length > 0
+    graphRelationships.length > 0
       ? Math.round(
-          visibleRelationships.reduce(
+          graphRelationships.reduce(
             (total, relationship) => total + relationship.strength,
             0,
-          ) / visibleRelationships.length,
+          ) / graphRelationships.length,
         )
       : 0;
+  const templateCharacterLabel =
+    graphCharacters.length === 0
+      ? "Select characters for this graph"
+      : graphCharacters.length === 1
+        ? graphCharacters[0]?.name || "1 character selected"
+        : `${graphCharacters.length} characters selected`;
+  const templateRelationshipCount = draftGraphRelationships.length;
+
+  const toggleTemplateCharacter = (characterId: string) => {
+    setTemplateCharacterIds((prev) =>
+      prev.includes(characterId)
+        ? prev.filter((id) => id !== characterId)
+        : [...prev, characterId],
+    );
+  };
+
+  const resetTemplateCanvas = () => {
+    setTemplateTitle("");
+    setTemplateCharacterIds([]);
+    setEditingTemplateId(null);
+    setSelectedCharacterId(null);
+    setIsTemplateCharacterPickerOpen(false);
+    setNodePositions({});
+  };
+
+  const handleLoadTemplate = (template: RelationshipGraphTemplate) => {
+    setTemplateTitle(template.title);
+    setTemplateCharacterIds(
+      template.characterIds.filter((characterId) => characterMap.has(characterId)),
+    );
+    setEditingTemplateId(template.id);
+    setSelectedCharacterId(template.characterIds[0] || null);
+    setNodePositions({});
+    setIsTemplateCharacterPickerOpen(false);
+
+    toast.success("Relationship template loaded", {
+      description: `${template.title} now shows the latest saved relationships for those characters.`,
+    });
+  };
+
+  const handleDeleteTemplate = async (templateId: string) => {
+    const template = relationshipTemplates.find((item) => item.id === templateId);
+    const shouldDelete = await confirmDelete({
+      title: `Delete "${template?.title || "this template"}"?`,
+      description:
+        "This saved relationship graph template will be removed from your template library.",
+      confirmLabel: "Delete Template",
+    });
+    if (!shouldDelete) return;
+
+    setStoredTemplates((prev) =>
+      normalizeRelationshipGraphTemplates(prev).filter((item) => item.id !== templateId),
+    );
+
+    if (editingTemplateId === templateId) {
+      resetTemplateCanvas();
+    }
+
+    toast.success("Relationship template deleted");
+  };
+
+  const handleSaveTemplate = () => {
+    const normalizedTitle = templateTitle.trim();
+
+    if (!normalizedTitle) {
+      toast.error("Add a template heading");
+      return;
+    }
+
+    if (templateCharacterIds.length === 0) {
+      toast.error("Select at least one character for the graph");
+      return;
+    }
+
+    const now = new Date().toISOString();
+    const nextTemplate: RelationshipGraphTemplate = {
+      id: editingTemplateId || crypto.randomUUID(),
+      title: normalizedTitle,
+      characterIds: templateCharacterIds,
+      createdAt:
+        relationshipTemplates.find((template) => template.id === editingTemplateId)?.createdAt ||
+        now,
+      updatedAt: now,
+    };
+
+    setStoredTemplates((prev) => {
+      const normalized = normalizeRelationshipGraphTemplates(prev);
+      const existingIndex = normalized.findIndex((template) => template.id === nextTemplate.id);
+
+      if (existingIndex >= 0) {
+        const copy = [...normalized];
+        copy[existingIndex] = nextTemplate;
+        return copy;
+      }
+
+      return [nextTemplate, ...normalized];
+    });
+
+    setEditingTemplateId(nextTemplate.id);
+
+    toast.success(editingTemplateId ? "Relationship template updated" : "Relationship template saved", {
+      description: `${normalizedTitle} is ready to load from your template library.`,
+    });
+  };
+
+  const getTemplateRelationshipCount = (characterIds: string[]) =>
+    visibleRelationships.filter(
+      (relationship) =>
+        characterIds.includes(relationship.characterAId) &&
+        characterIds.includes(relationship.characterBId),
+    ).length;
 
   const updateTimelineEntry = (
     id: string,
@@ -368,8 +546,8 @@ const CharacterRelationships = () => {
             </CardTitle>
           </CardHeader>
           <CardContent>
-            <p className="text-3xl font-bold font-mono">{characters.length}</p>
-            <p className="mt-1 text-xs text-muted-foreground">Nodes pulled from Character Lab storage</p>
+            <p className="text-3xl font-bold font-mono">{graphCharacters.length}</p>
+            <p className="mt-1 text-xs text-muted-foreground">Characters currently placed on the active graph canvas</p>
           </CardContent>
         </Card>
 
@@ -380,8 +558,8 @@ const CharacterRelationships = () => {
             </CardTitle>
           </CardHeader>
           <CardContent>
-            <p className="text-3xl font-bold font-mono">{visibleRelationships.length}</p>
-            <p className="mt-1 text-xs text-muted-foreground">Stored edges across your cast map</p>
+            <p className="text-3xl font-bold font-mono">{graphRelationships.length}</p>
+            <p className="mt-1 text-xs text-muted-foreground">Connections shown in the current graph view</p>
           </CardContent>
         </Card>
 
@@ -393,13 +571,215 @@ const CharacterRelationships = () => {
           </CardHeader>
           <CardContent>
             <p className="text-3xl font-bold font-mono">{averageStrength}</p>
-            <p className="mt-1 text-xs text-muted-foreground">Based on current relationship slider values</p>
+            <p className="mt-1 text-xs text-muted-foreground">Average strength for the relationships visible on the graph</p>
           </CardContent>
         </Card>
       </div>
 
       <div className="grid grid-cols-1 gap-4 xl:grid-cols-[1.55fr_1fr]">
         <div className="space-y-4">
+          <Card className="glow-card glow-border">
+            <CardHeader className="space-y-4">
+              <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
+                <div>
+                  <CardTitle className="text-base font-mono">Graph Templates</CardTitle>
+                  <p className="mt-1 text-sm text-muted-foreground">
+                    Start with an empty graph, choose which characters belong on it, then save that relationship map as a reusable template.
+                  </p>
+                </div>
+                <div className="flex flex-wrap items-center gap-2">
+                  {editingTemplateId ? (
+                    <Badge variant="outline" className="font-mono text-[11px]">
+                      Editing saved template
+                    </Badge>
+                  ) : (
+                    <Badge variant="outline" className="font-mono text-[11px]">
+                      New template draft
+                    </Badge>
+                  )}
+                  <Button
+                    type="button"
+                    variant="ghost"
+                    size="sm"
+                    className="font-mono"
+                    onClick={resetTemplateCanvas}
+                  >
+                    Clear Canvas
+                  </Button>
+                </div>
+              </div>
+            </CardHeader>
+            <CardContent className="space-y-4">
+              <div className="space-y-2">
+                <Label className="font-mono text-xs">Template Heading</Label>
+                <Input
+                  value={templateTitle}
+                  onChange={(event) => {
+                    setTemplateTitle(event.target.value);
+                  }}
+                  placeholder="Ex: Court Alliances Season One"
+                />
+              </div>
+
+              <div className="space-y-2">
+                <Label className="font-mono text-xs">Graph Characters</Label>
+                <Popover
+                  open={isTemplateCharacterPickerOpen}
+                  onOpenChange={setIsTemplateCharacterPickerOpen}
+                >
+                  <PopoverTrigger asChild>
+                    <Button
+                      type="button"
+                      variant="outline"
+                      role="combobox"
+                      aria-expanded={isTemplateCharacterPickerOpen}
+                      className="w-full justify-between font-normal"
+                    >
+                      <span className="truncate text-left">{templateCharacterLabel}</span>
+                      <ChevronsUpDown className="h-4 w-4 shrink-0 opacity-50" />
+                    </Button>
+                  </PopoverTrigger>
+                  <PopoverContent
+                    align="start"
+                    className="w-[var(--radix-popover-trigger-width)] border-border/70 bg-card/95 p-0 shadow-none backdrop-blur-sm"
+                  >
+                    <Command className="bg-transparent">
+                      <CommandInput placeholder="Search characters for this graph..." />
+                      <CommandList className="max-h-[15.75rem] overflow-y-auto p-1 [scrollbar-width:thin]">
+                        <CommandEmpty>No matching character found.</CommandEmpty>
+                        {characters.map((character) => {
+                          const isSelected = templateCharacterIds.includes(character.id);
+
+                          return (
+                            <CommandItem
+                              key={character.id}
+                              value={`${character.name} ${character.type || ""}`}
+                              onSelect={() => toggleTemplateCharacter(character.id)}
+                              className="my-1 flex items-start gap-3 rounded-[10px] border border-border/70 bg-background/55 px-3 py-2.5"
+                            >
+                              <Checkbox
+                                checked={isSelected}
+                                className="mt-0.5 pointer-events-none"
+                              />
+                              <div className="min-w-0 flex-1 space-y-0.5">
+                                <p className="truncate text-sm font-medium">{character.name}</p>
+                                <p className="text-xs text-muted-foreground">
+                                  {character.type || "Character Type Unset"}
+                                </p>
+                              </div>
+                              <Check
+                                className={cn(
+                                  "mt-0.5 h-4 w-4 shrink-0 text-neon-cyan transition-opacity",
+                                  isSelected ? "opacity-100" : "opacity-0",
+                                )}
+                              />
+                            </CommandItem>
+                          );
+                        })}
+                      </CommandList>
+                    </Command>
+                  </PopoverContent>
+                </Popover>
+                {characters.length > TEMPLATE_VISIBLE_CHARACTER_LIMIT ? (
+                  <p className="text-[11px] font-mono text-muted-foreground">
+                    Showing {TEMPLATE_VISIBLE_CHARACTER_LIMIT} characters at a time. Search or scroll to build the graph cast.
+                  </p>
+                ) : null}
+              </div>
+
+              {graphCharacters.length > 0 ? (
+                <div className="flex flex-wrap gap-2">
+                  {graphCharacters.map((character) => (
+                    <Badge key={character.id} variant="outline" className="font-mono text-[11px]">
+                      {character.name}
+                    </Badge>
+                  ))}
+                </div>
+              ) : (
+                <div className="rounded-xl border border-dashed border-border bg-muted/20 p-4">
+                  <p className="text-sm text-muted-foreground">
+                    The graph starts empty. Select characters to place them on the canvas, then add relationships from the editor on the right.
+                  </p>
+                </div>
+              )}
+
+              <div className="flex flex-wrap items-center justify-between gap-3 rounded-xl border border-border bg-muted/20 p-4">
+                <div>
+                  <p className="font-mono text-[11px] uppercase tracking-[0.18em] text-neon-cyan">
+                    Template Snapshot
+                  </p>
+                  <p className="mt-1 text-sm text-muted-foreground">
+                    {graphCharacters.length} characters • {templateRelationshipCount} current relationship
+                    {templateRelationshipCount === 1 ? "" : "s"} ready to save into this template.
+                  </p>
+                </div>
+                <Button
+                  type="button"
+                  onClick={handleSaveTemplate}
+                  className="bg-neon-purple font-mono hover:bg-neon-purple/90"
+                >
+                  <LayoutTemplate className="h-4 w-4" />
+                  {editingTemplateId ? "Update Template" : "Save Template"}
+                </Button>
+              </div>
+
+              <div className="space-y-3">
+                <div className="flex items-center justify-between gap-3">
+                  <p className="font-mono text-[11px] uppercase tracking-[0.18em] text-muted-foreground">
+                    Saved Templates
+                  </p>
+                  <Badge variant="outline" className="font-mono text-[11px]">
+                    {relationshipTemplates.length}
+                  </Badge>
+                </div>
+                {relationshipTemplates.length > 0 ? (
+                  relationshipTemplates.map((template) => (
+                    <div
+                      key={template.id}
+                      className="rounded-xl border border-border bg-muted/20 p-4"
+                    >
+                      <div className="flex flex-wrap items-start justify-between gap-3">
+                        <div className="space-y-1">
+                          <p className="font-medium">{template.title}</p>
+                          <p className="text-xs font-mono text-muted-foreground">
+                            {template.characterIds.length} character
+                            {template.characterIds.length === 1 ? "" : "s"} •{" "}
+                            {getTemplateRelationshipCount(template.characterIds)} relationship
+                            {getTemplateRelationshipCount(template.characterIds) === 1 ? "" : "s"}
+                          </p>
+                        </div>
+                        <div className="flex items-center gap-2">
+                          <Button
+                            type="button"
+                            variant="outline"
+                            size="sm"
+                            className="font-mono"
+                            onClick={() => handleLoadTemplate(template)}
+                          >
+                            Load
+                          </Button>
+                          <Button
+                            type="button"
+                            variant="ghost"
+                            size="icon"
+                            className="h-8 w-8 text-muted-foreground hover:text-destructive"
+                            onClick={() => void handleDeleteTemplate(template.id)}
+                          >
+                            <Trash2 className="h-4 w-4" />
+                          </Button>
+                        </div>
+                      </div>
+                    </div>
+                  ))
+                ) : (
+                  <p className="text-sm text-muted-foreground">
+                    No graph templates saved yet. Build a cast map and save it here when it is ready.
+                  </p>
+                )}
+              </div>
+            </CardContent>
+          </Card>
+
           <Card className="glow-card glow-border">
             <CardHeader className="space-y-4">
               <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
@@ -449,8 +829,20 @@ const CharacterRelationships = () => {
             <CardContent>
               <div
                 onWheel={handleGraphWheel}
-                className="overflow-hidden rounded-2xl border border-border bg-[radial-gradient(circle_at_top,hsl(var(--muted)/0.55),transparent_55%),linear-gradient(180deg,hsl(var(--background)),hsl(var(--card)))]"
+                className="relative overflow-hidden rounded-2xl border border-border bg-[radial-gradient(circle_at_top,hsl(var(--muted)/0.55),transparent_55%),linear-gradient(180deg,hsl(var(--background)),hsl(var(--card)))]"
               >
+                {graphCharacters.length === 0 ? (
+                  <div className="absolute inset-0 z-10 flex items-center justify-center px-6 text-center">
+                    <div className="max-w-md rounded-2xl border border-dashed border-border bg-background/75 px-6 py-5 backdrop-blur-sm">
+                      <p className="font-mono text-[11px] uppercase tracking-[0.18em] text-neon-cyan">
+                        Empty Graph
+                      </p>
+                      <p className="mt-2 text-sm text-muted-foreground">
+                        Choose characters in Graph Templates to start building a relationship map, then use the existing editor to add bonds between them.
+                      </p>
+                    </div>
+                  </div>
+                ) : null}
                 <svg
                   ref={svgRef}
                   viewBox={`0 0 ${GRAPH_WIDTH} ${GRAPH_HEIGHT}`}
@@ -460,7 +852,7 @@ const CharacterRelationships = () => {
                   )}
                   style={{ transform: `scale(${zoom})` }}
                 >
-                  {visibleRelationships.map((relationship) => {
+                  {graphRelationships.map((relationship) => {
                     const start = nodePositions[relationship.characterAId];
                     const end = nodePositions[relationship.characterBId];
                     if (!start || !end) return null;
@@ -497,12 +889,12 @@ const CharacterRelationships = () => {
                     );
                   })}
 
-                  {characters.map((character) => {
+                  {graphCharacters.map((character) => {
                     const position = nodePositions[character.id];
                     if (!position) return null;
 
                     const isSelected = selectedCharacterId === character.id;
-                    const connectionCount = visibleRelationships.filter(
+                    const connectionCount = graphRelationships.filter(
                       (relationship) =>
                         relationship.characterAId === character.id ||
                         relationship.characterBId === character.id,
@@ -614,10 +1006,10 @@ const CharacterRelationships = () => {
                       <p className="font-mono text-[11px] uppercase tracking-[0.18em] text-neon-cyan">
                         Avg Strength
                       </p>
-                      <p className="mt-2 text-3xl font-bold font-mono">
-                        {selectedCharacterRelationships.length > 0
-                          ? Math.round(
-                              selectedCharacterRelationships.reduce(
+                          <p className="mt-2 text-3xl font-bold font-mono">
+                            {selectedCharacterRelationships.length > 0
+                              ? Math.round(
+                                  selectedCharacterRelationships.reduce(
                                 (total, relationship) => total + relationship.strength,
                                 0,
                               ) / selectedCharacterRelationships.length,
@@ -692,19 +1084,19 @@ const CharacterRelationships = () => {
               <CardTitle className="text-base font-mono">Add Relationship</CardTitle>
             </CardHeader>
             <CardContent className="space-y-4">
-              <div className="grid grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-1">
+                <div className="grid grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-1">
                 <div className="space-y-2">
                   <Label className="font-mono text-xs">Character A</Label>
-                  <Select
-                    value={form.characterAId}
-                    onValueChange={(value) =>
-                      setForm((prev) => ({ ...prev, characterAId: value }))
-                    }
+                <Select
+                  value={form.characterAId}
+                  onValueChange={(value) =>
+                    setForm((prev) => ({ ...prev, characterAId: value }))
+                  }
                   >
                     <SelectTrigger>
                       <SelectValue placeholder="Choose a character" />
                     </SelectTrigger>
-                    <SelectContent>
+                    <SelectContent showScrollButtons={false}>
                       {characters.map((character) => (
                         <SelectItem key={character.id} value={character.id}>
                           {character.name}
@@ -716,16 +1108,16 @@ const CharacterRelationships = () => {
 
                 <div className="space-y-2">
                   <Label className="font-mono text-xs">Character B</Label>
-                  <Select
-                    value={form.characterBId}
-                    onValueChange={(value) =>
-                      setForm((prev) => ({ ...prev, characterBId: value }))
-                    }
+                <Select
+                  value={form.characterBId}
+                  onValueChange={(value) =>
+                    setForm((prev) => ({ ...prev, characterBId: value }))
+                  }
                   >
                     <SelectTrigger>
                       <SelectValue placeholder="Choose a character" />
                     </SelectTrigger>
-                    <SelectContent>
+                    <SelectContent showScrollButtons={false}>
                       {characters.map((character) => (
                         <SelectItem key={character.id} value={character.id}>
                           {character.name}

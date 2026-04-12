@@ -1,4 +1,8 @@
+import { sortCharactersByPriority } from "@/lib/characterPriority";
+
 export const CHARACTER_RELATIONSHIP_STORAGE_KEY = "writeforge-character-relationships";
+export const CHARACTER_RELATIONSHIP_TEMPLATE_STORAGE_KEY =
+  "writeforge-character-relationship-templates";
 
 export const RELATIONSHIP_TYPES = [
   {
@@ -40,6 +44,7 @@ export interface RelationshipCharacter {
   name: string;
   type: string;
   logline: string;
+  pinned: boolean;
 }
 
 export interface RelationshipTimelineEntry {
@@ -69,6 +74,14 @@ export interface RelationshipFormState {
   timeline: RelationshipTimelineEntry[];
 }
 
+export interface RelationshipGraphTemplate {
+  id: string;
+  title: string;
+  characterIds: string[];
+  createdAt: string;
+  updatedAt: string;
+}
+
 const RELATIONSHIP_TYPE_SET = new Set<string>(RELATIONSHIP_TYPES.map((type) => type.value));
 
 const toText = (value: unknown): string => (typeof value === "string" ? value : "");
@@ -77,6 +90,11 @@ const toNumber = (value: unknown, fallback: number): number =>
 
 const clamp = (value: number, min: number, max: number) =>
   Math.min(Math.max(value, min), max);
+
+const normalizeStringArray = (value: unknown): string[] =>
+  Array.isArray(value)
+    ? value.filter((item): item is string => typeof item === "string" && item.trim().length > 0)
+    : [];
 
 const isRelationshipType = (value: unknown): value is RelationshipType =>
   typeof value === "string" && RELATIONSHIP_TYPE_SET.has(value);
@@ -121,6 +139,7 @@ export const normalizeRelationshipCharacter = (
     name: toText(record.name) || `Character ${fallbackIndex + 1}`,
     type: toText(record.type),
     logline: toText(record.logline),
+    pinned: record.pinned === true,
   };
 };
 
@@ -129,9 +148,11 @@ export const normalizeRelationshipCharacters = (
 ): RelationshipCharacter[] => {
   if (!Array.isArray(value) || value.length === 0) return [];
 
-  return value
-    .map((character, index) => normalizeRelationshipCharacter(character, index))
-    .filter((character) => character.name.trim().length > 0);
+  return sortCharactersByPriority(
+    value
+      .map((character, index) => normalizeRelationshipCharacter(character, index))
+      .filter((character) => character.name.trim().length > 0),
+  );
 };
 
 export const normalizeCharacterRelationship = (
@@ -166,6 +187,36 @@ export const normalizeCharacterRelationships = (
     ? value.map((relationship, index) =>
         normalizeCharacterRelationship(relationship, index),
       )
+    : [];
+
+export const normalizeRelationshipGraphTemplate = (
+  value: unknown,
+  fallbackIndex: number,
+): RelationshipGraphTemplate => {
+  const record =
+    value && typeof value === "object" ? (value as Record<string, unknown>) : {};
+  const createdAt = toText(record.createdAt) || new Date().toISOString();
+  const updatedAt = toText(record.updatedAt) || createdAt;
+
+  return {
+    id: toText(record.id) || `relationship-template-${fallbackIndex + 1}`,
+    title: toText(record.title).trim() || `Relationship Template ${fallbackIndex + 1}`,
+    characterIds: normalizeStringArray(record.characterIds),
+    createdAt,
+    updatedAt,
+  };
+};
+
+export const normalizeRelationshipGraphTemplates = (
+  value: unknown,
+): RelationshipGraphTemplate[] =>
+  Array.isArray(value)
+    ? value
+        .map((template, index) => normalizeRelationshipGraphTemplate(template, index))
+        .sort(
+          (left, right) =>
+            new Date(right.updatedAt).getTime() - new Date(left.updatedAt).getTime(),
+        )
     : [];
 
 export const getRelationshipTypeStyle = (type: RelationshipType) =>

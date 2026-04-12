@@ -1,3 +1,5 @@
+import { sortCharactersByPriority } from "@/lib/characterPriority";
+
 export const PLOT_BUILDER_STORAGE_KEY = "writeforge-plot-builder";
 
 export const PLOT_PHASES = [
@@ -30,6 +32,7 @@ export interface PlotCharacterLink {
   id: string;
   name: string;
   type: string;
+  pinned: boolean;
 }
 
 export interface PlotSceneLink {
@@ -146,18 +149,21 @@ export const getPhaseStyle = (phase: PlotPhase) =>
 export const normalizePlotCharacters = (value: unknown): PlotCharacterLink[] => {
   if (!Array.isArray(value) || value.length === 0) return [];
 
-  return value
-    .map((item, index) => {
-      const record =
-        item && typeof item === "object" ? (item as Record<string, unknown>) : {};
+  return sortCharactersByPriority(
+    value
+      .map((item, index) => {
+        const record =
+          item && typeof item === "object" ? (item as Record<string, unknown>) : {};
 
-      return {
-        id: toText(record.id) || `character-${index + 1}`,
-        name: toText(record.name) || `Character ${index + 1}`,
-        type: toText(record.type),
-      };
-    })
-    .filter((character) => character.name.trim().length > 0);
+        return {
+          id: toText(record.id) || `character-${index + 1}`,
+          name: toText(record.name) || `Character ${index + 1}`,
+          type: toText(record.type),
+          pinned: record.pinned === true,
+        };
+      })
+      .filter((character) => character.name.trim().length > 0),
+  );
 };
 
 export const normalizePlotScenes = (value: unknown): PlotSceneLink[] =>

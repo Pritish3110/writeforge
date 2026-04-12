@@ -85,6 +85,25 @@ describe("worldEngine", () => {
     expect(selection.category).toBe("cultural");
     expect(WORLD_ELEMENT_OPTIONS.cultural).toContain(selection.element);
   });
+
+  it("supports custom categories with freeform elements", () => {
+    const result = generateWorldElementPrompt({
+      category: "custom",
+      element: "sentient weather archives",
+    });
+
+    expect(result.category).toBe("custom");
+    expect(result.element).toBe("sentient weather archives");
+    expect(result.prompt.toLowerCase()).toContain("sentient weather archives");
+    expect(result.title.trim().length).toBeGreaterThan(0);
+  });
+
+  it("keeps random world selection on built-in categories", () => {
+    const selection = getRandomWorldSelection("custom");
+
+    expect(["physical", "cultural", "magic"]).toContain(selection.category);
+    expect(WORLD_ELEMENT_OPTIONS[selection.category]).toContain(selection.element);
+  });
 });
 
 describe("worldElements helpers", () => {

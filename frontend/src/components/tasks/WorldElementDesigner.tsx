@@ -86,6 +86,7 @@ const WORLD_SECTIONS: Array<{
     placeholder: "How can this be used in a narrative?",
   },
 ];
+const DROPDOWN_VISIBLE_ITEM_LIMIT = 6;
 
 const formatSavedDate = (value: string) => {
   const parsed = new Date(value);
@@ -116,6 +117,8 @@ const WorldElementDesigner = ({ showIntro = true }: { showIntro?: boolean }) => 
       ),
     [selectedCategory, selectedElement],
   );
+  const isCustomCategory = selectedCategory === "custom";
+  const shouldSearchElementPicker = categoryElements.length > DROPDOWN_VISIBLE_ITEM_LIMIT;
   const filledSections = countFilledWorldSections(content);
   const completionPercent = Math.round((filledSections / WORLD_SECTIONS.length) * 100);
   const titleSuggestion = suggestWorldElementTitle(content.concept);
@@ -190,9 +193,13 @@ const WorldElementDesigner = ({ showIntro = true }: { showIntro?: boolean }) => 
     const nextCategory = value as WorldCategory;
     const nextCategoryElements = getWorldElementsForCategory(nextCategory);
     setSelectedCategory(nextCategory);
-    setSelectedElement((prev) =>
-      nextCategoryElements.includes(prev) ? prev : nextCategoryElements[0],
-    );
+    setSelectedElement((prev) => {
+      if (nextCategory === "custom") {
+        return selectedCategory === "custom" ? prev : "";
+      }
+
+      return nextCategoryElements.includes(prev) ? prev : nextCategoryElements[0];
+    });
     setElementPickerOpen(false);
 
     if (titleAutoMode === "prompt" && !content.concept.trim()) {
@@ -207,6 +214,11 @@ const WorldElementDesigner = ({ showIntro = true }: { showIntro?: boolean }) => 
   };
 
   const handleGeneratePrompt = () => {
+    if (isCustomCategory && !selectedElement.trim()) {
+      toast.error("Add a custom element first");
+      return;
+    }
+
     const result = generateWorldElementPrompt({
       category: selectedCategory,
       element: selectedElement,
@@ -255,6 +267,13 @@ const WorldElementDesigner = ({ showIntro = true }: { showIntro?: boolean }) => 
   };
 
   const handleSave = () => {
+    const normalizedElement = selectedElement.trim();
+
+    if (!normalizedElement) {
+      toast.error("Add a world element before saving");
+      return;
+    }
+
     if (filledSections === 0) {
       toast.error("Fill at least one section before saving");
       return;
@@ -275,12 +294,12 @@ const WorldElementDesigner = ({ showIntro = true }: { showIntro?: boolean }) => 
       title.trim() ||
       suggestWorldElementTitle(normalizedContent.concept) ||
       generatedPrompt?.title ||
-      formatWorldElementLabel(selectedElement);
+      formatWorldElementLabel(normalizedElement);
 
     const nextRecord = buildWorldElementRecord({
       id: existingRecord?.id || crypto.randomUUID(),
       category: selectedCategory,
-      element: selectedElement,
+      element: normalizedElement,
       title: normalizedTitle,
       content: normalizedContent,
       createdAt: existingRecord?.createdAt || now,
@@ -399,51 +418,69 @@ const WorldElementDesigner = ({ showIntro = true }: { showIntro?: boolean }) => 
 
         <div>
           <Label className="font-mono text-xs">Element</Label>
-          <Popover open={elementPickerOpen} onOpenChange={setElementPickerOpen}>
-            <PopoverTrigger asChild>
-              <Button
-                type="button"
-                variant="outline"
-                role="combobox"
-                aria-expanded={elementPickerOpen}
-                className="mt-1 w-full justify-between font-normal"
-              >
-                <span className="truncate">
-                  {selectedElement ? formatWorldElementLabel(selectedElement) : "Select element"}
-                </span>
-                <ChevronsUpDown className="ml-2 h-4 w-4 shrink-0 opacity-50" />
-              </Button>
-            </PopoverTrigger>
-            <PopoverContent className="w-[var(--radix-popover-trigger-width)] border-border/70 bg-card/95 p-0 backdrop-blur-sm" align="start">
-              <Command className="bg-transparent">
-                <CommandInput placeholder={`Search ${formatWorldCategoryLabel(selectedCategory)} elements...`} />
-                <CommandList className="max-h-60 overflow-y-auto [scrollbar-width:thin]">
-                  <CommandEmpty>No matching element found.</CommandEmpty>
-                  {categoryElements.map((element) => (
-                    <CommandItem
-                      key={element}
-                      value={`${element} ${formatWorldElementLabel(element)}`}
-                      onSelect={() => handleElementChange(element)}
-                      className="flex items-center justify-between gap-3 px-3 py-2.5"
-                    >
-                      <div className="min-w-0">
-                        <p className="truncate">{formatWorldElementLabel(element)}</p>
-                      </div>
-                      <Check
-                        className={cn(
-                          "h-4 w-4 shrink-0 text-neon-cyan transition-opacity",
-                          selectedElement === element ? "opacity-100" : "opacity-0",
-                        )}
-                      />
-                    </CommandItem>
-                  ))}
-                </CommandList>
-              </Command>
-            </PopoverContent>
-          </Popover>
-          <p className="mt-1 text-[11px] font-mono text-muted-foreground">
-            {categoryElements.length} element options available for this category.
-          </p>
+          {isCustomCategory ? (
+            <>
+              <Textarea
+                value={selectedElement}
+                onChange={(event) => setSelectedElement(event.target.value)}
+                placeholder="Describe any custom world element or category focus you want to build."
+                className="mt-1 min-h-[92px]"
+              />
+              <p className="mt-1 text-[11px] font-mono text-muted-foreground">
+                Write any custom element you want instead of choosing from the predefined sets.
+              </p>
+            </>
+          ) : (
+            <>
+              <Popover open={elementPickerOpen} onOpenChange={setElementPickerOpen}>
+                <PopoverTrigger asChild>
+                  <Button
+                    type="button"
+                    variant="outline"
+                    role="combobox"
+                    aria-expanded={elementPickerOpen}
+                    className="mt-1 w-full justify-between font-normal"
+                  >
+                    <span className="truncate">
+                      {selectedElement ? formatWorldElementLabel(selectedElement) : "Select element"}
+                    </span>
+                    <ChevronsUpDown className="ml-2 h-4 w-4 shrink-0 opacity-50" />
+                  </Button>
+                </PopoverTrigger>
+                <PopoverContent className="w-[var(--radix-popover-trigger-width)] border-border/70 bg-card/95 p-0 shadow-none backdrop-blur-sm" align="start">
+                  <Command className="bg-transparent">
+                    {shouldSearchElementPicker ? (
+                      <CommandInput placeholder={`Search ${formatWorldCategoryLabel(selectedCategory)} elements...`} />
+                    ) : null}
+                    <CommandList className="max-h-60 overflow-y-auto [scrollbar-width:thin]">
+                      <CommandEmpty>No matching element found.</CommandEmpty>
+                      {categoryElements.map((element) => (
+                        <CommandItem
+                          key={element}
+                          value={`${element} ${formatWorldElementLabel(element)}`}
+                          onSelect={() => handleElementChange(element)}
+                          className="flex items-center justify-between gap-3 px-3 py-2.5"
+                        >
+                          <div className="min-w-0">
+                            <p className="truncate">{formatWorldElementLabel(element)}</p>
+                          </div>
+                          <Check
+                            className={cn(
+                              "h-4 w-4 shrink-0 text-neon-cyan transition-opacity",
+                              selectedElement === element ? "opacity-100" : "opacity-0",
+                            )}
+                          />
+                        </CommandItem>
+                      ))}
+                    </CommandList>
+                  </Command>
+                </PopoverContent>
+              </Popover>
+              <p className="mt-1 text-[11px] font-mono text-muted-foreground">
+                {categoryElements.length} element options available for this category.
+              </p>
+            </>
+          )}
         </div>
       </div>
 

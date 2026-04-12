@@ -5,7 +5,9 @@ import {
   type WorldPromptBank,
 } from "@/data/worldElementPromptBanks";
 
-export type WorldCategory = "physical" | "cultural" | "magic";
+type BuiltInWorldCategory = "physical" | "cultural" | "magic";
+
+export type WorldCategory = BuiltInWorldCategory | "custom";
 
 export interface GenerateWorldElementPromptOptions {
   category?: WorldCategory | string | null;
@@ -25,12 +27,18 @@ export interface GeneratedWorldElementPrompt {
   usedCount: number;
 }
 
-export const WORLD_CATEGORIES: WorldCategory[] = ["physical", "cultural", "magic"];
+export const WORLD_CATEGORIES: WorldCategory[] = ["physical", "cultural", "magic", "custom"];
+const BUILT_IN_WORLD_CATEGORIES: BuiltInWorldCategory[] = [
+  "physical",
+  "cultural",
+  "magic",
+];
 
 export const WORLD_CATEGORY_LABELS: Record<WorldCategory, string> = {
   physical: "Physical",
   cultural: "Cultural",
   magic: "Magic",
+  custom: "Custom",
 };
 
 export const WORLD_ELEMENT_OPTIONS: Record<WorldCategory, string[]> = {
@@ -121,6 +129,7 @@ export const WORLD_ELEMENT_OPTIONS: Record<WorldCategory, string[]> = {
     "necromancy",
     "magic detection",
   ],
+  custom: [],
 };
 
 export { WORLD_CATEGORY_PROMPT_BANKS, WORLD_ELEMENT_PROMPT_BANKS, WORLD_TEMPLATES };
@@ -161,7 +170,9 @@ export const formatWorldCategoryLabel = (category: WorldCategory): string =>
   WORLD_CATEGORY_LABELS[category];
 
 export const normalizeWorldCategory = (value?: WorldCategory | string | null): WorldCategory => {
-  if (value === "physical" || value === "cultural" || value === "magic") return value;
+  if (value === "physical" || value === "cultural" || value === "magic" || value === "custom") {
+    return value;
+  }
   return "physical";
 };
 
@@ -170,6 +181,7 @@ export const normalizeWorldElement = (
   value?: string | null,
 ): string => {
   const trimmed = value?.trim();
+  if (category === "custom") return trimmed || "";
   return trimmed || getRandom(getWorldElementsForCategory(category));
 };
 
@@ -179,8 +191,19 @@ export const getWorldElementsForCategory = (category: WorldCategory): string[] =
 const getWorldPromptBank = (
   category: WorldCategory,
   element: string,
-): WorldPromptBank =>
-  WORLD_ELEMENT_PROMPT_BANKS[category][element] || WORLD_CATEGORY_PROMPT_BANKS[category];
+): WorldPromptBank => {
+  if (category === "custom") {
+    return {
+      templates: WORLD_TEMPLATES,
+      cores: CORES,
+      mechanics: MECHANICS,
+      impacts: IMPACTS,
+      consequences: CONSEQUENCES,
+    };
+  }
+
+  return WORLD_ELEMENT_PROMPT_BANKS[category][element] || WORLD_CATEGORY_PROMPT_BANKS[category];
+};
 
 export const formatWorldElementLabel = (value: string): string =>
   value
@@ -194,7 +217,11 @@ export const formatWorldElementLabel = (value: string): string =>
     .join(" ");
 
 export const getRandomWorldSelection = (category?: WorldCategory | string | null) => {
-  const nextCategory = category ? normalizeWorldCategory(category) : getRandom(WORLD_CATEGORIES);
+  const normalizedCategory = category ? normalizeWorldCategory(category) : null;
+  const nextCategory =
+    normalizedCategory && normalizedCategory !== "custom"
+      ? normalizedCategory
+      : getRandom(BUILT_IN_WORLD_CATEGORIES);
   return {
     category: nextCategory,
     element: getRandom(getWorldElementsForCategory(nextCategory)),

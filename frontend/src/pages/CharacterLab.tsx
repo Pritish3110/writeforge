@@ -5,7 +5,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
-import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
+import { Collapsible, CollapsibleContent } from "@/components/ui/collapsible";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { cn } from "@/lib/utils";
 import { useDeleteConfirmation } from "@/components/DeleteConfirmationProvider";
@@ -208,16 +208,17 @@ const CharacterSection = ({
 }) => (
   <Collapsible open={open} onOpenChange={onOpenChange} className="group/profile-section scroll-mt-6">
     <div className="rounded-xl border border-border bg-muted/30 px-4 py-4 md:px-5 md:py-5 space-y-4">
-      <CollapsibleTrigger asChild>
-        <Button
-          variant="ghost"
-          size="sm"
-          className="w-full justify-between px-0 py-0 h-auto hover:bg-transparent font-mono"
-        >
-          <span className={cn("text-sm uppercase tracking-[0.2em]", accentClass)}>{title}</span>
-          <ChevronDown className="h-4 w-4 text-muted-foreground transition-transform duration-200 ease-in-out group-data-[state=open]/profile-section:rotate-180" />
-        </Button>
-      </CollapsibleTrigger>
+      <Button
+        type="button"
+        variant="ghost"
+        size="sm"
+        aria-expanded={open}
+        onClick={() => onOpenChange(!open)}
+        className="h-auto w-full touch-manipulation justify-between px-0 py-0 font-mono active:scale-100 hover:bg-transparent"
+      >
+        <span className={cn("text-sm uppercase tracking-[0.2em]", accentClass)}>{title}</span>
+        <ChevronDown className="pointer-events-none h-4 w-4 text-muted-foreground transition-transform duration-200 ease-in-out group-data-[state=open]/profile-section:rotate-180" />
+      </Button>
       <CollapsibleContent className="pt-1">
         {children}
       </CollapsibleContent>
@@ -247,7 +248,7 @@ const CharacterLab = () => {
   const [storedCharacters, setStoredCharacters] = useLocalStorage<unknown[]>("writeforge-characters", buildDefaultCharacters());
   const [editing, setEditing] = useState<Character | null>(null);
   const [showForm, setShowForm] = useState(false);
-  const [additionalOpen, setAdditionalOpen] = useState(true);
+  const [additionalOpen, setAdditionalOpen] = useState(false);
   const [viewingCharacterId, setViewingCharacterId] = useState<string | null>(null);
   const [profileSections, setProfileSections] = useState<Record<ProfileSectionKey, boolean>>(defaultProfileSections());
   const [filterType, setFilterType] = useState<CharacterViewFilter>("All");
@@ -496,7 +497,7 @@ const CharacterLab = () => {
   const startNew = () => {
     setEditing(emptyChar());
     setShowForm(true);
-    setAdditionalOpen(true);
+    setAdditionalOpen(false);
     setRemovingTraitId(null);
     setRemovingContradictionIndex(null);
   };
@@ -735,7 +736,7 @@ const CharacterLab = () => {
                     <div className="space-y-3">
                       {editing.contradictions.map((contradiction, index) => (
                         <div
-                          key={`${index}-${contradiction.left}-${contradiction.right}-${contradiction.description}`}
+                          key={`${editing.id}-contradiction-${index}`}
                           className={cn(
                             "rounded-lg border border-border bg-muted/20 p-3 space-y-3 animate-in fade-in-0 zoom-in-95 duration-200",
                             removingContradictionIndex === index && "animate-out fade-out-0 zoom-out-95 duration-200 pointer-events-none opacity-50"

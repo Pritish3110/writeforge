@@ -12,12 +12,15 @@ import {
   type PromptTone,
   type StoryPhase,
 } from "@/data/tasks";
+import { sortCharactersByPriority } from "@/lib/characterPriority";
 
 export type { PromptTone, StoryPhase };
 
 export interface PromptCharacter {
   id: string;
   name: string;
+  type: string;
+  pinned: boolean;
   personalityTraits: string[];
   contradictions: string[];
 }
@@ -462,13 +465,19 @@ export const normalizePromptCharacter = (value: unknown, fallbackIndex: number):
   return {
     id: toText(record.id) || `prompt-character-${fallbackIndex + 1}`,
     name: toText(record.name).trim() || `Character ${fallbackIndex + 1}`,
+    type: toText(record.type),
+    pinned: record.pinned === true,
     personalityTraits: unique(personalityTraits),
     contradictions: unique(contradictions),
   };
 };
 
 export const syncPromptCharacters = (value: unknown): PromptCharacter[] =>
-  Array.isArray(value) ? value.map((character, index) => normalizePromptCharacter(character, index)) : [];
+  Array.isArray(value)
+    ? sortCharactersByPriority(
+        value.map((character, index) => normalizePromptCharacter(character, index)),
+      )
+    : [];
 
 export const resetUsedPrompts = () => {
   usedPrompts.clear();

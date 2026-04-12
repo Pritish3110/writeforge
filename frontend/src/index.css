@@ -110,6 +110,18 @@
   [contenteditable="true"] {
     cursor: var(--cursor-pen);
   }
+  [data-radix-popper-content-wrapper],
+  [data-radix-popper-content-wrapper] * {
+    cursor: var(--cursor-pen);
+  }
+  [data-radix-popper-content-wrapper] button,
+  [data-radix-popper-content-wrapper] [role="button"],
+  [data-radix-popper-content-wrapper] [role="menuitem"],
+  [data-radix-popper-content-wrapper] [role="option"],
+  [data-radix-popper-content-wrapper] [data-radix-select-item],
+  [data-radix-popper-content-wrapper] [cmdk-item] {
+    cursor: var(--cursor-pen-pointer);
+  }
   ::selection {
     background: hsl(var(--foreground) / 0.14);
   }

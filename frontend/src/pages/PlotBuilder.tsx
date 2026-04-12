@@ -23,6 +23,13 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Checkbox } from "@/components/ui/checkbox";
 import {
+  Command,
+  CommandEmpty,
+  CommandInput,
+  CommandItem,
+  CommandList,
+} from "@/components/ui/command";
+import {
   Drawer,
   DrawerContent,
   DrawerDescription,
@@ -31,6 +38,7 @@ import {
 } from "@/components/ui/drawer";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import {
   Select,
   SelectContent,
@@ -43,7 +51,9 @@ import { Textarea } from "@/components/ui/textarea";
 import { toast } from "@/components/ui/sonner";
 import { useDeleteConfirmation } from "@/components/DeleteConfirmationProvider";
 import {
+  Check,
   ChevronDown,
+  ChevronsUpDown,
   Flame,
   GitFork,
   GripVertical,
@@ -71,6 +81,9 @@ const selectionRowClass =
 
 const emptyStateClass =
   "rounded-[10px] border border-dashed border-border/70 bg-muted/20 px-3 py-3";
+
+const characterPickerVisibleLimit = 6;
+const characterPickerMaxHeightRem = `${characterPickerVisibleLimit * 2.625}rem`;
 
 const workflowSteps = [
   {
@@ -209,6 +222,7 @@ const PlotBuilder = () => {
   const [draggedPointId, setDraggedPointId] = useState<string | null>(null);
   const [dragOverPointId, setDragOverPointId] = useState<string | null>(null);
   const [dragOverPhase, setDragOverPhase] = useState<PlotPhase | null>(null);
+  const [isCharacterPickerOpen, setIsCharacterPickerOpen] = useState(false);
   const [mode, setMode] = useState<SidebarMode>("summary");
   const [activeEditorSection, setActiveEditorSection] =
     useState<EditorAccordionSection | null>(null);
@@ -229,6 +243,11 @@ const PlotBuilder = () => {
   const pointMap = useMemo(
     () => new Map(plotPoints.map((point) => [point.id, point])),
     [plotPoints],
+  );
+  const selectedCharacters = useMemo(
+    () =>
+      characters.filter((character) => draft.characterIds.includes(character.id)),
+    [characters, draft.characterIds],
   );
 
   useEffect(() => {
@@ -329,6 +348,7 @@ const PlotBuilder = () => {
     ids.includes(id) ? ids.filter((item) => item !== id) : [...ids, id];
 
   const openSummaryPanel = () => {
+    setIsCharacterPickerOpen(false);
     setMode("summary");
     setEditingId(null);
     setIsCreating(false);
@@ -338,6 +358,7 @@ const PlotBuilder = () => {
   };
 
   const clearContextSelection = () => {
+    setIsCharacterPickerOpen(false);
     setMode("summary");
     setEditingId(null);
     setIsCreating(false);
@@ -346,6 +367,7 @@ const PlotBuilder = () => {
   };
 
   const startCreatePoint = (phase: PlotPhase = "Promise") => {
+    setIsCharacterPickerOpen(false);
     setMode("draft");
     setEditingId(null);
     setIsCreating(true);
@@ -361,6 +383,7 @@ const PlotBuilder = () => {
   };
 
   const openPointDetails = (point: PlotPoint) => {
+    setIsCharacterPickerOpen(false);
     setMode("draft");
     setEditingId(point.id);
     setIsCreating(false);
@@ -373,6 +396,7 @@ const PlotBuilder = () => {
   };
 
   const resetDraftChanges = () => {
+    setIsCharacterPickerOpen(false);
     if (activePoint) {
       setDraft(toDraft(activePoint));
       return;
@@ -439,6 +463,7 @@ const PlotBuilder = () => {
       description: `${title} is now part of your story board.`,
     });
 
+    setIsCharacterPickerOpen(false);
     setMode("draft");
     setEditingId(pointId);
     setIsCreating(false);
@@ -585,6 +610,13 @@ const PlotBuilder = () => {
   const toggleEditorSection = (section: EditorAccordionSection) => {
     setActiveEditorSection((prev) => (prev === section ? null : section));
   };
+
+  const characterPickerLabel =
+    selectedCharacters.length === 0
+      ? "Select characters"
+      : selectedCharacters.length === 1
+        ? selectedCharacters[0]?.name || "1 character selected"
+        : `${selectedCharacters.length} characters selected`;
 
   const renderSummaryPanel = (mobile = false) => (
     <div className={cn("flex flex-col gap-3", mobile ? "pb-4" : "h-full justify-between")}>
@@ -851,10 +883,10 @@ const PlotBuilder = () => {
                   value={draft.phase}
                   onValueChange={(value) => updateDraft({ phase: value as PlotPhase })}
                 >
-                  <SelectTrigger className="h-10 rounded-[10px] border-border/70 bg-background/70 shadow-none focus:ring-1 focus:ring-ring focus:ring-offset-0">
+                  <SelectTrigger>
                     <SelectValue />
                   </SelectTrigger>
-                  <SelectContent className="border-border/70 bg-popover shadow-none">
+                  <SelectContent>
                     {PLOT_PHASES.map((phase) => (
                       <SelectItem key={phase.value} value={phase.value}>
                         {phase.value}
@@ -926,27 +958,109 @@ const PlotBuilder = () => {
           >
             <div className="space-y-2">
               {characters.length > 0 ? (
-                characters.map((character) => (
-                  <label
-                    key={character.id}
-                    className={cn("flex items-start gap-3", selectionRowClass)}
+                <>
+                  <Popover
+                    open={isCharacterPickerOpen}
+                    onOpenChange={setIsCharacterPickerOpen}
                   >
-                    <Checkbox
-                      checked={draft.characterIds.includes(character.id)}
-                      onCheckedChange={() =>
-                        updateDraft({
-                          characterIds: toggleId(draft.characterIds, character.id),
-                        })
-                      }
-                    />
-                    <div className="space-y-0.5">
-                      <p className="text-sm font-medium">{character.name}</p>
-                      <p className="text-xs text-muted-foreground">
-                        {character.type || "Character Type Unset"}
+                    <PopoverTrigger asChild>
+                      <Button
+                        type="button"
+                        variant="outline"
+                        role="combobox"
+                        aria-expanded={isCharacterPickerOpen}
+                        className={cn(
+                          "w-full justify-between border-border/70 bg-background/70 px-3 font-normal shadow-none hover:bg-muted/30",
+                          fieldSurfaceClass,
+                        )}
+                      >
+                        <span className="truncate text-left">
+                          {characterPickerLabel}
+                        </span>
+                        <ChevronsUpDown className="h-4 w-4 shrink-0 opacity-50" />
+                      </Button>
+                    </PopoverTrigger>
+                    <PopoverContent
+                      align="start"
+                      className="w-[var(--radix-popover-trigger-width)] border-border/70 bg-card/95 p-0 shadow-none backdrop-blur-sm"
+                    >
+                      <Command className="bg-transparent">
+                        <CommandInput placeholder="Search characters..." />
+                        <CommandList
+                          style={{ maxHeight: characterPickerMaxHeightRem }}
+                          className="overflow-y-auto p-1 [scrollbar-width:thin]"
+                        >
+                          <CommandEmpty>No matching character found.</CommandEmpty>
+                          {characters.map((character) => {
+                            const isSelected = draft.characterIds.includes(character.id);
+
+                            return (
+                              <CommandItem
+                                key={character.id}
+                                value={`${character.name} ${character.type || ""}`}
+                                onSelect={() =>
+                                  updateDraft({
+                                    characterIds: toggleId(draft.characterIds, character.id),
+                                  })
+                                }
+                                className={cn(
+                                  "my-1 flex items-start gap-3 rounded-[10px] border border-border/70 bg-background/55 px-3 py-2.5",
+                                  "data-[selected=true]:border-primary/30 data-[selected=true]:bg-muted/40",
+                                )}
+                              >
+                                <Checkbox
+                                  checked={isSelected}
+                                  className="mt-0.5 pointer-events-none"
+                                />
+                                <div className="min-w-0 flex-1 space-y-0.5">
+                                  <p className="truncate text-sm font-medium">
+                                    {character.name}
+                                  </p>
+                                  <p className="text-xs text-muted-foreground">
+                                    {character.type || "Character Type Unset"}
+                                  </p>
+                                </div>
+                                <Check
+                                  className={cn(
+                                    "mt-0.5 h-4 w-4 shrink-0 text-neon-cyan transition-opacity",
+                                    isSelected ? "opacity-100" : "opacity-0",
+                                  )}
+                                />
+                              </CommandItem>
+                            );
+                          })}
+                        </CommandList>
+                      </Command>
+                    </PopoverContent>
+                  </Popover>
+
+                  {characters.length > characterPickerVisibleLimit ? (
+                    <p className="text-[11px] font-mono text-muted-foreground">
+                      Showing {characterPickerVisibleLimit} characters at a time. Search or
+                      scroll to browse the full list.
+                    </p>
+                  ) : null}
+
+                  {selectedCharacters.length > 0 ? (
+                    <div className="flex flex-wrap gap-2">
+                      {selectedCharacters.map((character) => (
+                        <Badge
+                          key={character.id}
+                          variant="outline"
+                          className={metadataBadgeClass}
+                        >
+                          {character.name}
+                        </Badge>
+                      ))}
+                    </div>
+                  ) : (
+                    <div className={emptyStateClass}>
+                      <p className="text-sm text-muted-foreground">
+                        No characters linked yet. Open the picker to attach the right arcs to this beat.
                       </p>
                     </div>
-                  </label>
-                ))
+                  )}
+                </>
               ) : (
                 <div className={emptyStateClass}>
                   <p className="text-sm text-muted-foreground">
