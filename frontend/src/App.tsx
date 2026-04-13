@@ -21,6 +21,7 @@ import { DeleteConfirmationProvider } from "@/components/DeleteConfirmationProvi
 import LoadingScreen from "@/components/LoadingScreen";
 import AuthPage, { AuthLoadingState } from "./pages/AuthPage";
 import Dashboard from "./pages/Dashboard";
+import SkillBuilder from "./pages/SkillBuilder";
 import DailyTasks from "./pages/DailyTasks";
 import WeeklySchedule from "./pages/WeeklySchedule";
 import Analytics from "./pages/Analytics";
@@ -97,6 +98,7 @@ const App = () => {
                   <Route path="/auth" element={<AuthOnlyRoute />} />
                   <Route element={<ProtectedAppShell />}>
                     <Route path="/" element={<Dashboard />} />
+                    <Route path="/skill-builder" element={<SkillBuilder />} />
                     <Route path="/daily-tasks" element={<DailyTasks />} />
                     <Route path="/weekly-schedule" element={<WeeklySchedule />} />
                     <Route path="/analytics" element={<Analytics />} />

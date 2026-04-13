@@ -2,10 +2,12 @@ import { useCallback, useEffect, useState } from "react";
 import {
   fetchLearningProgress,
   fetchLearningToday,
+  submitSkillBuilderWriting,
   submitLearningPerformance,
   type LearningPerformance,
   type LearningProgressSummary,
   type LearningTodaySummary,
+  type SkillBuilderSubmitResponse,
 } from "@/services/learningClient";
 
 interface UseLearningEngineOptions {
@@ -13,9 +15,8 @@ interface UseLearningEngineOptions {
   loadProgress?: boolean;
 }
 
-const TODAY_LOAD_ERROR = "Unable to load today's practice. Please try again in a moment.";
-const PROGRESS_LOAD_ERROR = "Unable to load your skill insights. Please try again in a moment.";
-const SUBMIT_ERROR = "Unable to save your practice just now. Please try again in a moment.";
+const LOAD_ERROR = "Unable to load content. Please try again.";
+const SUBMIT_ERROR = "Submission failed. Try again.";
 
 export const useLearningEngine = ({
   loadToday = true,
@@ -40,7 +41,7 @@ export const useLearningEngine = ({
       setProgress(payload.progress);
       return payload;
     } catch {
-      setError(TODAY_LOAD_ERROR);
+      setError(LOAD_ERROR);
       return null;
     } finally {
       setLoadingToday(false);
@@ -61,7 +62,7 @@ export const useLearningEngine = ({
       setProgress(payload.progress);
       return payload;
     } catch {
-      setError(PROGRESS_LOAD_ERROR);
+      setError(LOAD_ERROR);
       return null;
     } finally {
       setLoadingProgress(false);
@@ -107,6 +108,42 @@ export const useLearningEngine = ({
     [loadProgress, loadToday, refreshProgress, refreshToday],
   );
 
+  const submitWriting = useCallback(
+    async (topicId: string, content: string): Promise<SkillBuilderSubmitResponse | null> => {
+      setSubmittingTopicId(topicId);
+      setError(null);
+
+      try {
+        const payload = await submitSkillBuilderWriting(topicId, content);
+        setProgress(payload.progress);
+
+        if (loadToday) {
+          const refreshPayload = await refreshToday();
+          if (!refreshPayload) {
+            setError(null);
+            setProgress(payload.progress);
+          }
+        }
+
+        if (loadProgress && !loadToday) {
+          const refreshPayload = await refreshProgress();
+          if (!refreshPayload) {
+            setError(null);
+            setProgress(payload.progress);
+          }
+        }
+
+        return payload;
+      } catch {
+        setError(SUBMIT_ERROR);
+        return null;
+      } finally {
+        setSubmittingTopicId(null);
+      }
+    },
+    [loadProgress, loadToday, refreshProgress, refreshToday],
+  );
+
   return {
     today,
     progress,
@@ -117,5 +154,6 @@ export const useLearningEngine = ({
     refreshToday,
     refreshProgress,
     submitPerformance,
+    submitWriting,
   };
 };

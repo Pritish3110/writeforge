@@ -52,6 +52,30 @@ export interface LearningProgressSummary {
     count: number;
     level: number;
   }>;
+  skillBuilderInsights?: SkillBuilderInsights;
+}
+
+export interface SkillBuilderTopicStat {
+  topicId: string;
+  title: string;
+  themeTitle: string;
+  attempts: number;
+  avgScore: number;
+  recommendation?: string;
+}
+
+export interface SkillBuilderInsights {
+  entriesCount: number;
+  totalWritingCount: number;
+  totalWritingWords: number;
+  avgScore: number;
+  heatmap: Array<{
+    date: string;
+    count: number;
+    level: number;
+  }>;
+  topicsPracticed: SkillBuilderTopicStat[];
+  weakAreas: SkillBuilderTopicStat[];
 }
 
 interface LearningPayloadBase {
@@ -90,6 +114,7 @@ export interface LearningQueueItem {
   title: string;
   themeTitle: string;
   stage: LearningStage;
+  topic?: LearningTopic;
   payload: LearningStagePayload;
 }
 
@@ -124,6 +149,35 @@ export interface LearningSubmitResponse {
   easeFactor: number;
   reinforcementTriggered: boolean;
   progress: LearningProgressSummary;
+}
+
+export interface SkillBuilderEntry {
+  id: string;
+  user_id: string;
+  topic_id: string;
+  content: string;
+  created_at: string;
+  evaluation_score: number;
+  tags: string[];
+  feedback: string;
+}
+
+export interface SkillBuilderEvaluation {
+  score: number;
+  tags: string[];
+  feedback: string;
+  suggestion: string;
+}
+
+export interface SkillBuilderSubmitResponse {
+  success: boolean;
+  userId: string;
+  entry: SkillBuilderEntry;
+  evaluation: SkillBuilderEvaluation;
+  performance: LearningPerformance;
+  progress: LearningProgressSummary;
+  stage: LearningStage;
+  nextReview: string;
 }
 
 const resolveLearningUserId = async () => {
@@ -181,4 +235,20 @@ export const submitLearningPerformance = async (
   });
 
   return readJson<LearningSubmitResponse>(response);
+};
+
+export const submitSkillBuilderWriting = async (
+  topicId: string,
+  content: string,
+): Promise<SkillBuilderSubmitResponse> => {
+  const response = await fetch(buildApiUrl("/api/learning/submit-writing"), {
+    method: "POST",
+    headers: await createLearningHeaders(),
+    body: JSON.stringify({
+      topicId,
+      content,
+    }),
+  });
+
+  return readJson<SkillBuilderSubmitResponse>(response);
 };

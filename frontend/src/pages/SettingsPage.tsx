@@ -184,12 +184,12 @@ const SettingsPage = () => {
 
     if (dangerAction === "reset-workspace") {
       return {
-        confirmLabel: "Reset workspace",
+        confirmLabel: "Hard reset workspace",
         description:
-          "This clears your saved tasks, drafts, story tools, and related progress from this workspace.",
+          "This clears saved tasks, drafts, story tools, and local progress from this workspace.",
         inputLabel: "Type the confirmation phrase below to continue.",
-        requiredPhrase: "reset workspace",
-        title: "Reset all progress?",
+        requiredPhrase: "hard reset workspace",
+        title: "Hard reset workspace?",
         warning:
           "This is a hard reset. Your saved writing progress in this workspace will be removed immediately and cannot be recovered.",
       };
@@ -294,10 +294,12 @@ const SettingsPage = () => {
 
     const reader = new FileReader();
     reader.onload = () => {
-      if (typeof reader.result === "string") {
+      const avatarUrl = reader.result;
+
+      if (typeof avatarUrl === "string") {
         setProfileForm((current) => ({
           ...current,
-          avatarUrl: reader.result,
+          avatarUrl,
         }));
       }
     };
@@ -613,9 +615,9 @@ const SettingsPage = () => {
               label="Reset workspace progress"
               description="Clear saved progress from this workspace when you want a fresh start."
               action={
-                <Button variant="outline" onClick={handleReset}>
+                <Button variant="destructive" onClick={handleReset}>
                   <TriangleAlert className="h-4 w-4" />
-                  Reset all progress
+                  Hard reset workspace
                 </Button>
               }
             />

@@ -15,14 +15,19 @@ const Analytics = () => {
   const catStats = getCategoryStats();
   const learnedConcepts = learningProgress?.topicsCompleted || 0;
   const totalConcepts = learningProgress?.totalTopics || 0;
+  const skillInsights = learningProgress?.skillBuilderInsights;
+  const skillAvgScore = skillInsights?.avgScore || 0;
+  const skillTopicsPracticed = skillInsights?.topicsPracticed || [];
+  const skillWeakAreas = skillInsights?.weakAreas || [];
   const weeklyLearningActivity =
     learningProgress?.heatmap?.slice(-7).reduce((sum, cell) => sum + cell.count, 0) || 0;
   const improvingThemes =
-    learningProgress?.themes
-      ?.filter((theme) => theme.masteredTopics > 0 || theme.status === "in_progress")
+    (skillTopicsPracticed.length > 0
+      ? skillTopicsPracticed.filter((topic) => topic.avgScore >= 70)
+      : learningProgress?.themes || [])
       .slice(0, 2)
       .map((theme) => theme.title) || [];
-  const nextFocusTopic = learningProgress?.weakTopics?.[0] || null;
+  const nextFocusTopic = skillWeakAreas[0] || learningProgress?.weakTopics?.[0] || null;
   const activeSkillTrack = learningProgress?.activeTheme?.title || "Writing craft";
   const suggestionCopy = nextFocusTopic
     ? `You're close to mastering ${nextFocusTopic.title.toLowerCase()}. Practice a few more examples to improve.`
@@ -184,7 +189,7 @@ const Analytics = () => {
           </Card>
         ) : null}
 
-        <div className="grid grid-cols-1 gap-4 md:grid-cols-3">
+        <div className="grid grid-cols-1 gap-4 md:grid-cols-4">
           <Card className="glow-card glow-border">
             <CardHeader className="pb-2">
               <CardTitle className="text-sm font-mono text-muted-foreground flex items-center gap-2">
@@ -204,16 +209,29 @@ const Analytics = () => {
 
           <Card className="glow-card glow-border">
             <CardHeader className="pb-2">
-              <CardTitle className="text-sm font-mono text-muted-foreground">Practice Streak</CardTitle>
+              <CardTitle className="text-sm font-mono text-muted-foreground">Avg Score</CardTitle>
             </CardHeader>
             <CardContent>
               <p className="text-4xl font-bold font-mono text-neon-purple">
-                {loadingProgress ? "..." : learningProgress?.streak.current || 0}
+                {loadingProgress ? "..." : skillAvgScore}
+                <span className="text-lg text-muted-foreground">/100</span>
               </p>
               <p className="text-xs text-muted-foreground">
-                {loadingProgress
-                  ? "tracking your consistency"
-                  : `best run: ${learningProgress?.streak.longest || 0} day${(learningProgress?.streak.longest || 0) === 1 ? "" : "s"}`}
+                average Skill Builder evaluation
+              </p>
+            </CardContent>
+          </Card>
+
+          <Card className="glow-card glow-border">
+            <CardHeader className="pb-2">
+              <CardTitle className="text-sm font-mono text-muted-foreground">Topics Practiced</CardTitle>
+            </CardHeader>
+            <CardContent>
+              <p className="text-4xl font-bold font-mono text-neon-pink">
+                {loadingProgress ? "..." : skillTopicsPracticed.length}
+              </p>
+              <p className="text-xs text-muted-foreground">
+                technique{skillTopicsPracticed.length === 1 ? "" : "s"} used in writing
               </p>
             </CardContent>
           </Card>
@@ -223,7 +241,7 @@ const Analytics = () => {
               <CardTitle className="text-sm font-mono text-muted-foreground">Activity</CardTitle>
             </CardHeader>
             <CardContent>
-              <p className="text-4xl font-bold font-mono text-neon-pink">
+              <p className="text-4xl font-bold font-mono text-neon-cyan">
                 {loadingProgress ? "..." : weeklyLearningActivity}
               </p>
               <p className="text-xs text-muted-foreground">
@@ -263,6 +281,15 @@ const Analytics = () => {
                 <p className="mt-2 text-sm text-muted-foreground">
                   {nextFocusTopic?.title || activeSkillTrack}
                 </p>
+                {skillWeakAreas.length > 1 ? (
+                  <div className="mt-3 flex flex-wrap gap-2">
+                    {skillWeakAreas.slice(1, 4).map((topic) => (
+                      <Badge key={topic.topicId} variant="outline">
+                        {topic.title}
+                      </Badge>
+                    ))}
+                  </div>
+                ) : null}
               </div>
             </CardContent>
           </Card>

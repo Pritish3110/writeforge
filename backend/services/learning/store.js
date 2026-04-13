@@ -8,18 +8,22 @@ const learningProgressPath = path.resolve(
   __dirname,
   "../../database/learningProgress.json",
 );
+const skillBuilderEntriesPath = path.resolve(
+  __dirname,
+  "../../database/skillBuilderEntries.json",
+);
 
-const ensureFile = async () => {
+const ensureFile = async (filePath) => {
   try {
-    await fs.access(learningProgressPath);
+    await fs.access(filePath);
   } catch {
-    await fs.writeFile(learningProgressPath, "[]\n", "utf8");
+    await fs.writeFile(filePath, "[]\n", "utf8");
   }
 };
 
-export const readLearningProgressStore = async () => {
-  await ensureFile();
-  const rawValue = await fs.readFile(learningProgressPath, "utf8");
+const readJsonArrayStore = async (filePath) => {
+  await ensureFile(filePath);
+  const rawValue = await fs.readFile(filePath, "utf8");
 
   try {
     const parsedValue = JSON.parse(rawValue);
@@ -29,11 +33,23 @@ export const readLearningProgressStore = async () => {
   }
 };
 
-export const writeLearningProgressStore = async (records) => {
-  await ensureFile();
+const writeJsonArrayStore = async (filePath, records) => {
+  await ensureFile(filePath);
   await fs.writeFile(
-    learningProgressPath,
+    filePath,
     `${JSON.stringify(records, null, 2)}\n`,
     "utf8",
   );
 };
+
+export const readLearningProgressStore = async () =>
+  readJsonArrayStore(learningProgressPath);
+
+export const writeLearningProgressStore = async (records) =>
+  writeJsonArrayStore(learningProgressPath, records);
+
+export const readSkillBuilderEntriesStore = async () =>
+  readJsonArrayStore(skillBuilderEntriesPath);
+
+export const writeSkillBuilderEntriesStore = async (records) =>
+  writeJsonArrayStore(skillBuilderEntriesPath, records);

@@ -3,7 +3,7 @@ import { useState } from "react";
 import {
   LayoutDashboard, CalendarCheck, CalendarDays, BarChart3,
   FlaskConical, Settings, Moon, Sun, BookOpen, Rocket, Wrench,
-  Activity, GitFork, Map, Sparkles, LogOut, ShieldCheck,
+  Activity, BrainCircuit, GitFork, Map, Sparkles, LogOut, ShieldCheck,
 } from "lucide-react";
 import { BrandMark } from "@/components/brand/BrandMark";
 import { NavLink } from "@/components/NavLink";
@@ -40,6 +40,7 @@ const FaviconNavIcon = (props: SVGProps<SVGSVGElement>) => (
 
 const items = [
   { title: "WriterZ Dashboard", url: "/", icon: LayoutDashboard },
+  { title: "Skill Builder", url: "/skill-builder", icon: BrainCircuit },
   { title: "Daily Tasks", url: "/daily-tasks", icon: CalendarCheck },
   { title: "Weekly Schedule", url: "/weekly-schedule", icon: CalendarDays },
   { title: "Analytics", url: "/analytics", icon: BarChart3 },

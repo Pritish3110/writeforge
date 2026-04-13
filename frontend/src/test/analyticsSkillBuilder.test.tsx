@@ -85,6 +85,31 @@ describe("Analytics Skill Builder", () => {
           { date: "2026-04-12", count: 0, level: 0 },
           { date: "2026-04-13", count: 0, level: 0 },
         ],
+        skillBuilderInsights: {
+          entriesCount: 3,
+          totalWritingCount: 3,
+          totalWritingWords: 24,
+          avgScore: 76,
+          topicsPracticed: [
+            {
+              topicId: "metaphor",
+              title: "Metaphor",
+              themeTitle: "Figurative Language",
+              attempts: 2,
+              avgScore: 66,
+            },
+          ],
+          weakAreas: [
+            {
+              topicId: "metaphor",
+              title: "Metaphor",
+              themeTitle: "Figurative Language",
+              attempts: 2,
+              avgScore: 66,
+              recommendation: "Practice metaphor with one clearer example.",
+            },
+          ],
+        },
       },
       loadingProgress: false,
       error: null,
@@ -94,7 +119,8 @@ describe("Analytics Skill Builder", () => {
 
     expect(screen.getByText("Skill Builder Insights")).toBeInTheDocument();
     expect(screen.getByText("Concepts Learned")).toBeInTheDocument();
-    expect(screen.getByText("Practice Streak")).toBeInTheDocument();
+    expect(screen.getByText("Avg Score")).toBeInTheDocument();
+    expect(screen.getByText("Topics Practiced")).toBeInTheDocument();
     expect(screen.getByText("Suggested Focus")).toBeInTheDocument();
     expect(screen.getByText(/you're close to mastering metaphor/i)).toBeInTheDocument();
     expect(screen.queryByText(/Learning Engine Analytics/i)).not.toBeInTheDocument();
@@ -106,13 +132,13 @@ describe("Analytics Skill Builder", () => {
     learningHookMock.useLearningEngine.mockReturnValue({
       progress: null,
       loadingProgress: false,
-      error: "Unable to load your skill insights. Please try again in a moment.",
+      error: "Unable to load content. Please try again.",
     });
 
     render(<Analytics />);
 
     expect(
-      screen.getByText("Unable to load your skill insights. Please try again in a moment."),
+      screen.getByText("Unable to load content. Please try again."),
     ).toBeInTheDocument();
     expect(screen.queryByText(/backend/i)).not.toBeInTheDocument();
   });

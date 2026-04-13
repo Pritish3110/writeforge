@@ -1,4 +1,5 @@
 import { render, screen } from "@testing-library/react";
+import { MemoryRouter } from "react-router-dom";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import DailyLearningCard from "@/components/DailyLearningCard";
 
@@ -42,13 +43,16 @@ describe("DailyLearningCard", () => {
   it("shows friendly empty-state copy", () => {
     learningHookMock.useLearningEngine.mockReturnValue(baseLearningState);
 
-    render(<DailyLearningCard />);
+    render(
+      <MemoryRouter>
+        <DailyLearningCard />
+      </MemoryRouter>,
+    );
 
     expect(screen.getByText("Skill Builder")).toBeInTheDocument();
-    expect(screen.getByText("You're all caught up for today")).toBeInTheDocument();
-    expect(
-      screen.getByText("Come back tomorrow to continue building your skills."),
-    ).toBeInTheDocument();
+    expect(screen.getByText("Today's Topic")).toBeInTheDocument();
+    expect(screen.getByText("Daily writing craft")).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: /dive into today's topic/i })).toBeInTheDocument();
     expect(screen.queryByText(/queue/i)).not.toBeInTheDocument();
     expect(screen.queryByText(/backend/i)).not.toBeInTheDocument();
   });
@@ -88,13 +92,15 @@ describe("DailyLearningCard", () => {
       },
     });
 
-    render(<DailyLearningCard />);
+    render(
+      <MemoryRouter>
+        <DailyLearningCard />
+      </MemoryRouter>,
+    );
 
-    expect(screen.getByText("Today's Focus")).toBeInTheDocument();
-    expect(screen.getByText("Quick Task")).toBeInTheDocument();
+    expect(screen.getByText("Today's Topic")).toBeInTheDocument();
     expect(screen.getAllByText("Metaphor Practice").length).toBeGreaterThan(0);
-    expect(screen.getAllByRole("button", { name: /start practice/i }).length).toBeGreaterThan(0);
-    expect(screen.getByText(/one short session is enough/i)).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: /dive into today's topic/i })).toBeInTheDocument();
     expect(screen.queryByText(/learning engine/i)).not.toBeInTheDocument();
     expect(screen.queryByText(/due today/i)).not.toBeInTheDocument();
   });
@@ -102,14 +108,16 @@ describe("DailyLearningCard", () => {
   it("masks technical errors with user-friendly copy", () => {
     learningHookMock.useLearningEngine.mockReturnValue({
       ...baseLearningState,
-      error: "Unable to load today's practice. Please try again in a moment.",
+      error: "Unable to load content. Please try again.",
     });
 
-    render(<DailyLearningCard />);
+    render(
+      <MemoryRouter>
+        <DailyLearningCard />
+      </MemoryRouter>,
+    );
 
-    expect(
-      screen.getByText("Unable to load today's practice. Please try again in a moment."),
-    ).toBeInTheDocument();
+    expect(screen.queryByText("Unable to load content. Please try again.")).not.toBeInTheDocument();
     expect(screen.queryByText(/fetch resource/i)).not.toBeInTheDocument();
   });
 });

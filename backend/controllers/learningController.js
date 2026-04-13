@@ -1,13 +1,14 @@
 import {
   getLearningProgress,
   getLearningToday,
+  submitSkillBuilderWriting,
   submitLearningReview,
 } from "../services/learning/engine.js";
 
 const resolveLearningUserId = (request) => {
   const headerValue = request.headers["x-learning-user-id"];
   const queryValue = request.query?.user_id;
-  const bodyValue = request.body?.user_id;
+  const bodyValue = request.body?.user_id || request.body?.userId;
 
   return (
     request.user?.uid ||
@@ -52,6 +53,49 @@ export const submitLearning = async (request, response, next) => {
       userId,
       topicId: topicId.trim(),
       performance,
+    });
+
+    response.status(200).json({
+      success: true,
+      userId,
+      ...payload,
+    });
+  } catch (error) {
+    next(error);
+  }
+};
+
+export const submitWriting = async (request, response, next) => {
+  try {
+    const userId = resolveLearningUserId(request);
+    const topicId =
+      typeof request.body?.topicId === "string"
+        ? request.body.topicId
+        : typeof request.body?.topic_id === "string"
+          ? request.body.topic_id
+          : "";
+    const content = typeof request.body?.content === "string" ? request.body.content : "";
+
+    if (!topicId.trim()) {
+      response.status(400).json({
+        success: false,
+        error: "topicId is required.",
+      });
+      return;
+    }
+
+    if (!content.trim()) {
+      response.status(400).json({
+        success: false,
+        error: "content is required.",
+      });
+      return;
+    }
+
+    const payload = await submitSkillBuilderWriting({
+      userId,
+      topicId: topicId.trim(),
+      content,
     });
 
     response.status(200).json({

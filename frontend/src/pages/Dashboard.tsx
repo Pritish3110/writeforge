@@ -102,15 +102,14 @@ const Dashboard = () => {
           </div>
         </CardContent>
       </Card>
-
-      <DailyLearningCard />
-
       <Button
         onClick={() => navigate("/daily-tasks")}
         className="w-full bg-neon-purple hover:bg-neon-purple/90 text-primary-foreground font-mono text-base py-6 glow-card"
       >
         Start Today's Session →
       </Button>
+
+      <DailyLearningCard />
     </div>
   );
 };

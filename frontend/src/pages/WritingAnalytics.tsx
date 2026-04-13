@@ -1,5 +1,6 @@
 import { Link } from "react-router-dom";
 import { PenMark } from "@/components/brand/PenMark";
+import { useLearningEngine } from "@/hooks/useLearningEngine";
 import { useLocalStorage } from "@/hooks/useLocalStorage";
 import { analyzeWritingDrafts, type WritingDraft } from "@/lib/writingAnalytics";
 import { cn } from "@/lib/utils";
@@ -68,10 +69,28 @@ const getToneLabel = (value: number, low: number, high: number) => {
 
 const WritingAnalytics = () => {
   const [drafts] = useLocalStorage<WritingDraft[]>("writeforge-drafts", []);
+  const { progress: learningProgress } = useLearningEngine({
+    loadToday: false,
+    loadProgress: true,
+  });
   const analytics = analyzeWritingDrafts(drafts);
+  const skillInsights = learningProgress?.skillBuilderInsights;
+  const skillHeatmapCounts = new Map(
+    (skillInsights?.heatmap || []).map((cell) => [cell.date, cell.count]),
+  );
+  const totalWords = analytics.totalWords + (skillInsights?.totalWritingWords || 0);
+  const sessionsCompleted = analytics.sessionsCompleted + (skillInsights?.entriesCount || 0);
+  const combinedHeatmap = analytics.heatmap.map((cell) => {
+    const skillSessions = skillHeatmapCounts.get(cell.date) || 0;
+    return {
+      ...cell,
+      sessions: cell.sessions + skillSessions,
+      level: Math.max(cell.level, skillSessions === 0 ? 0 : skillSessions === 1 ? 1 : 2),
+    };
+  });
   const maxWordCloudCount = analytics.topWords[0]?.count || 0;
 
-  if (drafts.length === 0) {
+  if (sessionsCompleted === 0) {
     return (
       <div className="max-w-4xl mx-auto space-y-6">
         <div>
@@ -122,8 +141,8 @@ const WritingAnalytics = () => {
             </CardTitle>
           </CardHeader>
           <CardContent>
-            <p className="text-3xl font-bold font-mono">{analytics.totalWords.toLocaleString()}</p>
-            <p className="mt-1 text-xs text-muted-foreground">Across all saved writing sessions</p>
+            <p className="text-3xl font-bold font-mono">{totalWords.toLocaleString()}</p>
+            <p className="mt-1 text-xs text-muted-foreground">Across drafts and Skill Builder entries</p>
           </CardContent>
         </Card>
 
@@ -134,8 +153,8 @@ const WritingAnalytics = () => {
             </CardTitle>
           </CardHeader>
           <CardContent>
-            <p className="text-3xl font-bold font-mono">{analytics.sessionsCompleted}</p>
-            <p className="mt-1 text-xs text-muted-foreground">Saved drafts analyzed for insight</p>
+            <p className="text-3xl font-bold font-mono">{sessionsCompleted}</p>
+            <p className="mt-1 text-xs text-muted-foreground">Saved drafts and guided practice entries</p>
           </CardContent>
         </Card>
 
@@ -146,7 +165,9 @@ const WritingAnalytics = () => {
             </CardTitle>
           </CardHeader>
           <CardContent>
-            <p className="text-3xl font-bold font-mono">{analytics.avgSessionLengthMinutes} min</p>
+            <p className="text-3xl font-bold font-mono">
+              {sessionsCompleted > 0 ? Math.max(1, Math.round(totalWords / sessionsCompleted / 25)) : 0} min
+            </p>
             <p className="mt-1 text-xs text-muted-foreground">Estimated from average words per session</p>
           </CardContent>
         </Card>
@@ -399,10 +420,10 @@ const WritingAnalytics = () => {
             </CardHeader>
             <CardContent className="space-y-4">
               <div className="grid grid-cols-7 gap-2">
-                {analytics.heatmap.map((cell) => (
+                {combinedHeatmap.map((cell) => (
                   <div key={cell.date} className="space-y-1">
                     <div
-                      title={`${cell.date} · ${cell.words} words · ${cell.sessions} session${cell.sessions === 1 ? "" : "s"}`}
+                      title={`${cell.date} · ${cell.words} draft words · ${cell.sessions} writing session${cell.sessions === 1 ? "" : "s"}`}
                       className="h-9 rounded-md transition-transform duration-200 hover:-translate-y-0.5"
                       style={{ backgroundColor: getHeatmapColor(cell.level) }}
                     />
