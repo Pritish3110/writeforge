@@ -1,8 +1,8 @@
 import { describe, expect, it } from "vitest";
-import { buildSkillBuilderImprovementPrompt } from "@/lib/promptEngine";
 import {
-  buildCoachFallback,
   buildDailyChallengeTask,
+  buildRuleBasedImprovement,
+  getImprovementChecklist,
   validateSkillBuilderDraft,
 } from "@/lib/skillBuilder";
 import type { LearningTopic } from "@/services/learningClient";
@@ -50,18 +50,15 @@ describe("skillBuilder helpers", () => {
     expect(task.prompt.length).toBeGreaterThan(10);
   });
 
-  it("creates the coaching prompt and fallback rewrite", () => {
-    const prompt = buildSkillBuilderImprovementPrompt({
-      topicTitle: "Simile",
-      content: "He was as strong as a bull. He never flinched.",
-    });
-    const fallback = buildCoachFallback(
+  it("creates a deterministic rewrite and checklist", () => {
+    const rewrite = buildRuleBasedImprovement(
       "He was as strong as a bull. He never flinched.",
       simileTopic,
     );
+    const checklist = getImprovementChecklist(simileTopic);
 
-    expect(prompt).toContain("You are a writing coach.");
-    expect(prompt).toContain("Simile");
-    expect(fallback.length).toBeGreaterThan(20);
+    expect(rewrite).toContain("raging bull");
+    expect(rewrite).toContain("arena");
+    expect(checklist).toHaveLength(3);
   });
 });

@@ -6,6 +6,7 @@ export type LearningPerformance = "again" | "hard" | "good" | "easy";
 export type LearningStage = "learn" | "recognize" | "apply" | "mastered";
 export type LearningPathStatus = "completed" | "current" | "upcoming";
 export type SkillBuilderTrend = "improving" | "declining" | "steady";
+export type LearningSessionStep = "learn" | "write" | "improve" | "challenge";
 
 export interface LearningConceptGuide {
   what: string;
@@ -246,6 +247,37 @@ export interface SkillBuilderSubmitResponse {
   progress: LearningProgressSummary;
   stage: LearningStage;
   nextReview: string;
+  session?: LearningSessionSummary;
+}
+
+export interface LearningSessionSummary {
+  id: string;
+  date: string;
+  topicId: string;
+  steps: Record<LearningSessionStep, boolean>;
+  writeScore: number | null;
+  challengeScore: number | null;
+  finalScore: number | null;
+  completed: boolean;
+}
+
+export interface LearningSessionResponse {
+  success: boolean;
+  userId: string;
+  session: LearningSessionSummary;
+}
+
+export interface LearningSessionUpdateResponse extends LearningSessionResponse {
+  progress: LearningProgressSummary;
+}
+
+export interface SkillBuilderChallengeResponse {
+  success: boolean;
+  userId: string;
+  evaluation: SkillBuilderEvaluation;
+  finalScore: number;
+  progress: LearningProgressSummary;
+  session: LearningSessionSummary;
 }
 
 const resolveLearningUserId = async () => {
@@ -261,6 +293,24 @@ const resolveLearningUserId = async () => {
 const createLearningHeaders = async () => ({
   "Content-Type": "application/json",
   "x-learning-user-id": await resolveLearningUserId(),
+});
+
+const normalizeSession = (
+  session: Partial<LearningSessionSummary> | null | undefined,
+): LearningSessionSummary => ({
+  id: String(session?.id || ""),
+  date: String(session?.date || ""),
+  topicId: String(session?.topicId || ""),
+  steps: {
+    learn: Boolean(session?.steps?.learn),
+    write: Boolean(session?.steps?.write),
+    improve: Boolean(session?.steps?.improve),
+    challenge: Boolean(session?.steps?.challenge),
+  },
+  writeScore: typeof session?.writeScore === "number" ? session.writeScore : null,
+  challengeScore: typeof session?.challengeScore === "number" ? session.challengeScore : null,
+  finalScore: typeof session?.finalScore === "number" ? session.finalScore : null,
+  completed: Boolean(session?.completed),
 });
 
 const normalizeBreakdownCategory = (
@@ -442,6 +492,7 @@ const normalizeSubmitResponse = (
 ): SkillBuilderSubmitResponse => ({
   ...payload,
   progress: normalizeProgress(payload.progress),
+  session: payload.session ? normalizeSession(payload.session) : undefined,
   entry: {
     ...payload.entry,
     breakdown: {
@@ -548,6 +599,47 @@ export const fetchLearningProgress = async (): Promise<LearningProgressResponse>
   };
 };
 
+export const fetchLearningSessionToday = async (): Promise<LearningSessionResponse> => {
+  const response = await fetch(buildApiUrl("/api/learning/session/today"), {
+    headers: await createLearningHeaders(),
+  });
+
+  const payload = await readJson<LearningSessionResponse>(response);
+
+  return {
+    ...payload,
+    session: normalizeSession(payload.session),
+  };
+};
+
+export const updateLearningSession = async ({
+  topicId,
+  step,
+  completed = true,
+}: {
+  topicId: string;
+  step: LearningSessionStep;
+  completed?: boolean;
+}): Promise<LearningSessionUpdateResponse> => {
+  const response = await fetch(buildApiUrl("/api/learning/session/update"), {
+    method: "POST",
+    headers: await createLearningHeaders(),
+    body: JSON.stringify({
+      topicId,
+      step,
+      completed,
+    }),
+  });
+
+  const payload = await readJson<LearningSessionUpdateResponse>(response);
+
+  return {
+    ...payload,
+    session: normalizeSession(payload.session),
+    progress: normalizeProgress(payload.progress),
+  };
+};
+
 export const submitLearningPerformance = async (
   topicId: string,
   performance: LearningPerformance,
@@ -585,4 +677,55 @@ export const submitSkillBuilderWriting = async (
   const payload = await readJson<SkillBuilderSubmitResponse>(response);
 
   return normalizeSubmitResponse(payload);
+};
+
+export const submitSkillBuilderChallenge = async ({
+  topicId,
+  content,
+  challengeScore,
+}: {
+  topicId: string;
+  content?: string;
+  challengeScore?: number;
+}): Promise<SkillBuilderChallengeResponse> => {
+  const response = await fetch(buildApiUrl("/api/learning/submit-challenge"), {
+    method: "POST",
+    headers: await createLearningHeaders(),
+    body: JSON.stringify({
+      topicId,
+      content,
+      challengeScore,
+    }),
+  });
+
+  const payload = await readJson<SkillBuilderChallengeResponse>(response);
+
+  return {
+    ...payload,
+    progress: normalizeProgress(payload.progress),
+    session: normalizeSession(payload.session),
+    evaluation: normalizeSubmitResponse({
+      success: true,
+      userId: payload.userId,
+      entry: {
+        id: "",
+        user_id: payload.userId,
+        topic_id: topicId,
+        content: content || "",
+        created_at: new Date().toISOString(),
+        evaluation_score: payload.evaluation.score,
+        tags: payload.evaluation.tags,
+        feedback: payload.evaluation.feedback,
+        breakdown: payload.evaluation.breakdown,
+        weak_parts: payload.evaluation.weakParts,
+        metrics: payload.evaluation.metrics,
+      },
+      evaluation: payload.evaluation,
+      performance: "good",
+      progress: payload.progress,
+      stage: "apply",
+      nextReview: "",
+      session: payload.session,
+    }).evaluation,
+  };
 };

@@ -21,6 +21,8 @@ export interface SkillBuilderChallengeTask {
   sampleAnswer?: string;
 }
 
+const ensureSentenceEnding = (value: string) => (/[.!?]$/.test(value) ? value : `${value}.`);
+
 const MIN_SENTENCES = 2;
 const MAX_SENTENCES = 3;
 const MIN_WORDS = 18;
@@ -148,6 +150,67 @@ export const buildCoachFallback = (content: string, topic: LearningTopic) => {
 
   return `${firstSentence.replace(/\s+$/, "")} ${secondSentence} The comparison now feels more grounded and vivid.`;
 };
+
+const addSubjectIfMissing = (sentence: string) => {
+  if (/^(he|she|they|it|the|a|an)\b/i.test(sentence)) return sentence;
+  return `He ${sentence.charAt(0).toLowerCase()}${sentence.slice(1)}`;
+};
+
+const enhanceSimile = (content: string) => {
+  const trimmed = content.trim();
+  if (!trimmed) return "";
+
+  const sentences = trimmed
+    .split(/(?<=[.!?])\s+/)
+    .map((sentence) => sentence.trim())
+    .filter(Boolean);
+  let firstSentence = addSubjectIfMissing(sentences[0] || trimmed);
+
+  firstSentence = firstSentence
+    .replace(/\bbull\b/i, "raging bull")
+    .replace(/\blion\b/i, "battle-ready lion")
+    .replace(/\bwind\b/i, "winter wind");
+
+  if (!/\bin\b/i.test(firstSentence)) {
+    firstSentence += " in the arena";
+  }
+
+  const secondSentence =
+    sentences[1] ||
+    "The moment stayed tense, and everyone around him could feel that strength.";
+
+  return `${ensureSentenceEnding(firstSentence)} ${ensureSentenceEnding(secondSentence)}`;
+};
+
+const enhanceWithContext = (content: string, topic: LearningTopic) => {
+  const trimmed = content.trim();
+  if (!trimmed) return "";
+
+  const sentences = trimmed
+    .split(/(?<=[.!?])\s+/)
+    .map((sentence) => sentence.trim())
+    .filter(Boolean);
+  const firstSentence = ensureSentenceEnding(addSubjectIfMissing(sentences[0] || trimmed));
+  const secondSentence =
+    sentences[1] ||
+    `The ${topic.title.toLowerCase()} lands better when the scene includes a setting and one stronger detail.`;
+
+  return `${firstSentence} ${ensureSentenceEnding(secondSentence)}`;
+};
+
+export const buildRuleBasedImprovement = (content: string, topic: LearningTopic) => {
+  if (topic.id === "simile" && /\b(as|like)\b/i.test(content)) {
+    return enhanceSimile(content);
+  }
+
+  return enhanceWithContext(content, topic);
+};
+
+export const getImprovementChecklist = (topic: LearningTopic) => [
+  "Add a setting so the reader knows where it happens.",
+  `Use a stronger ${topic.id === "simile" ? "comparison word" : "descriptive word"}.`,
+  "Add a second descriptive detail that supports the same image.",
+];
 
 export const getTrendLabel = (trend: SkillBuilderTrend) => {
   if (trend === "improving") return "Improving";

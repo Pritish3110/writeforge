@@ -12,6 +12,10 @@ const skillBuilderEntriesPath = path.resolve(
   __dirname,
   "../../database/skillBuilderEntries.json",
 );
+const learningSessionsPath = path.resolve(
+  __dirname,
+  "../../database/learningSessions.json",
+);
 
 const ensureFile = async (filePath) => {
   try {
@@ -53,3 +57,9 @@ export const readSkillBuilderEntriesStore = async () =>
 
 export const writeSkillBuilderEntriesStore = async (records) =>
   writeJsonArrayStore(skillBuilderEntriesPath, records);
+
+export const readLearningSessionsStore = async () =>
+  readJsonArrayStore(learningSessionsPath);
+
+export const writeLearningSessionsStore = async (records) =>
+  writeJsonArrayStore(learningSessionsPath, records);

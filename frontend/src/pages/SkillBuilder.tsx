@@ -1,18 +1,22 @@
 import { useEffect, useMemo, useState } from "react";
 import { format } from "date-fns";
 import {
+  fetchLearningSessionToday,
+  submitSkillBuilderChallenge,
+  updateLearningSession,
   type LearningPathItem,
   type LearningQueueItem,
+  type LearningSessionSummary,
+  type LearningSessionStep,
   type LearningTopic,
+  type SkillBuilderChallengeResponse,
   type SkillBuilderSubmitResponse,
 } from "@/services/learningClient";
 import { useLearningEngine } from "@/hooks/useLearningEngine";
-import { useLocalStorage } from "@/hooks/useLocalStorage";
-import { callBackendAI } from "@/services/backendAiClient";
-import { buildSkillBuilderImprovementPrompt } from "@/lib/promptEngine";
 import {
-  buildCoachFallback,
   buildDailyChallengeTask,
+  buildRuleBasedImprovement,
+  getImprovementChecklist,
   getTrendLabel,
   validateSkillBuilderDraft,
 } from "@/lib/skillBuilder";
@@ -96,6 +100,12 @@ const sessionStepLabels = {
 type SessionStep = keyof typeof sessionStepLabels;
 
 const sessionOrder: SessionStep[] = ["learn", "write", "improve", "challenge"];
+const emptySessionSteps: Record<SessionStep, boolean> = {
+  learn: false,
+  write: false,
+  improve: false,
+  challenge: false,
+};
 
 const tooltipStyle = {
   background: "hsl(var(--card))",
@@ -132,33 +142,33 @@ const StepPill = ({
 );
 
 const SkillBuilder = () => {
-  const { today, progress, error, loadingToday, submittingTopicId, submitWriting } = useLearningEngine();
+  const {
+    today,
+    progress,
+    error,
+    loadingToday,
+    submittingTopicId,
+    submitWriting,
+    refreshToday,
+  } = useLearningEngine();
   const [content, setContent] = useState("");
   const [result, setResult] = useState<SkillBuilderSubmitResponse | null>(null);
+  const [challengeResult, setChallengeResult] = useState<SkillBuilderChallengeResponse | null>(null);
   const [activeStep, setActiveStep] = useState<SessionStep>("learn");
   const [coachDraft, setCoachDraft] = useState("");
-  const [coachMode, setCoachMode] = useState<"ai" | "fallback" | null>(null);
-  const [coachError, setCoachError] = useState<string | null>(null);
   const [improving, setImproving] = useState(false);
+  const [session, setSession] = useState<LearningSessionSummary | null>(null);
+  const [loadingSession, setLoadingSession] = useState(true);
+  const [sessionError, setSessionError] = useState<string | null>(null);
+  const [persistingStep, setPersistingStep] = useState<LearningSessionStep | null>(null);
   const [challengeResponse, setChallengeResponse] = useState("");
-  const [challengeFeedback, setChallengeFeedback] = useState<string | null>(null);
   const currentItem = useMemo(
     () => today?.application || today?.new || today?.reviews?.[0] || null,
     [today],
   );
   const topic = getTopicFromItem(currentItem);
   const dateKey = new Date().toISOString().slice(0, 10);
-  const sessionStorageKey = `${dateKey}-${topic?.id || "pending"}`;
-  const [sessionStore, setSessionStore] = useLocalStorage<
-    Record<string, Record<SessionStep, boolean>>
-  >("writerz-skill-builder-sessions", {});
-  const sessionState = sessionStore[sessionStorageKey] || {
-    learn: false,
-    write: false,
-    improve: false,
-    challenge: false,
-  };
-
+  const sessionState = session?.steps || emptySessionSteps;
   const prompt = getPracticePrompt(topic, currentItem);
   const hint = getPracticeHint(topic, currentItem);
   const guide = topic?.conceptGuide || {
@@ -195,103 +205,148 @@ const SkillBuilder = () => {
     );
   }, [dateKey, learningPath, topic]);
   const isSubmitting = Boolean(topic && submittingTopicId === topic.id);
-  const canSubmit = Boolean(topic && validation.isValid && !isSubmitting);
+  const isWriteLocked = sessionState.write;
+  const isImproveLocked = sessionState.improve;
+  const isChallengeLocked = sessionState.challenge;
+  const canSubmit = Boolean(topic && validation.isValid && !isSubmitting && !isWriteLocked);
   const completedCount = sessionOrder.filter((step) => sessionState[step]).length;
   const sessionProgress = (completedCount / sessionOrder.length) * 100;
+  const improvementChecklist = topic ? getImprovementChecklist(topic) : [];
 
   useEffect(() => {
     setResult(null);
+    setChallengeResult(null);
     setCoachDraft("");
-    setCoachMode(null);
-    setCoachError(null);
     setChallengeResponse("");
-    setChallengeFeedback(null);
     setActiveStep("learn");
   }, [topic?.id]);
 
-  const markStep = (step: SessionStep, nextStep?: SessionStep) => {
-    setSessionStore((previous) => ({
-      ...previous,
-      [sessionStorageKey]: {
-        ...sessionState,
-        [step]: true,
-      },
-    }));
+  useEffect(() => {
+    if (!topic) {
+      setSession(null);
+      setLoadingSession(false);
+      return;
+    }
 
-    if (nextStep) {
-      setActiveStep(nextStep);
+    let cancelled = false;
+
+    const loadSession = async () => {
+      setLoadingSession(true);
+      setSessionError(null);
+
+      try {
+        const payload = await fetchLearningSessionToday();
+        if (!cancelled) {
+          setSession(payload.session);
+        }
+      } catch {
+        if (!cancelled) {
+          setSession(null);
+          setSessionError("Session progress could not be restored.");
+        }
+      } finally {
+        if (!cancelled) {
+          setLoadingSession(false);
+        }
+      }
+    };
+
+    void loadSession();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [topic?.id]);
+
+  const persistStep = async (step: LearningSessionStep, nextStep?: SessionStep) => {
+    if (!topic || sessionState[step]) {
+      if (nextStep) setActiveStep(nextStep);
+      return;
+    }
+
+    setPersistingStep(step);
+    setSessionError(null);
+
+    try {
+      const payload = await updateLearningSession({
+        topicId: topic.id,
+        step,
+        completed: true,
+      });
+      setSession(payload.session);
+      await refreshToday();
+      if (nextStep) setActiveStep(nextStep);
+    } catch {
+      setSessionError("Could not save this step right now.");
+    } finally {
+      setPersistingStep(null);
     }
   };
 
   const handleSubmit = async () => {
-    if (!topic || !validation.isValid) return;
+    if (!topic || !validation.isValid || isWriteLocked) return;
 
     const payload = await submitWriting(topic.id, content);
     if (payload) {
       setResult(payload);
-      markStep("write", "improve");
+      setSession(payload.session || null);
+      setChallengeResult(null);
+      setActiveStep("improve");
     }
   };
 
   const handleCoachRewrite = async () => {
-    if (!topic || !content.trim()) return;
+    if (!topic || !content.trim() || isImproveLocked) return;
 
     setImproving(true);
-    setCoachError(null);
+    const rewrite = buildRuleBasedImprovement(content, topic);
+    setCoachDraft(rewrite);
+    setImproving(false);
+  };
+
+  const completeImproveStep = async (acceptDraft: boolean) => {
+    if (isImproveLocked) return;
+
+    if (acceptDraft && coachDraft) {
+      setContent(coachDraft);
+      setResult(null);
+    }
+
+    await persistStep("improve", "challenge");
+  };
+
+  const handleChallengeSubmit = async (answerId?: string) => {
+    if (!topic || !challengeTask || isChallengeLocked) return;
 
     try {
-      const response = await callBackendAI({
-        prompt: buildSkillBuilderImprovementPrompt({
-          topicTitle: topic.title,
-          content,
-        }),
-        generationConfig: {
-          maxOutputTokens: 220,
-          temperature: 0.7,
-        },
-      });
-      setCoachDraft(response.text.trim());
-      setCoachMode("ai");
+      let payload: SkillBuilderChallengeResponse;
+
+      if (challengeTask.type === "identify") {
+        const score = answerId === challengeTask.answerId ? 100 : 40;
+        payload = await submitSkillBuilderChallenge({
+          topicId: topic.id,
+          challengeScore: score,
+        });
+      } else {
+        if (!challengeResponse.trim()) {
+          setSessionError("Write a response before completing the challenge.");
+          return;
+        }
+        payload = await submitSkillBuilderChallenge({
+          topicId: topic.id,
+          content: challengeResponse,
+        });
+      }
+
+      setChallengeResult(payload);
+      setSession(payload.session);
+      await refreshToday();
     } catch {
-      setCoachDraft(buildCoachFallback(content, topic));
-      setCoachMode("fallback");
-      setCoachError("Live coaching was unavailable, so a local rewrite guide stepped in.");
-    } finally {
-      setImproving(false);
+      setSessionError("Challenge scoring could not be saved.");
     }
   };
 
-  const handleAcceptCoachDraft = () => {
-    if (!coachDraft) return;
-    setContent(coachDraft);
-    setResult(null);
-    markStep("improve", "challenge");
-  };
-
-  const handleChallengeSubmit = (answerId?: string) => {
-    if (!challengeTask) return;
-
-    if (challengeTask.type === "identify") {
-      const isCorrect = answerId === challengeTask.answerId;
-      setChallengeFeedback(
-        isCorrect
-          ? "Nice. You spotted the technique correctly."
-          : `Not quite. This one is ${topic?.title}.`,
-      );
-      markStep("challenge");
-      return;
-    }
-
-    if (!challengeResponse.trim()) {
-      setChallengeFeedback("Write a quick response before finishing the challenge.");
-      return;
-    }
-
-    setChallengeFeedback("Challenge complete. You gave the idea another angle, which is exactly the point.");
-    markStep("challenge");
-  };
-
-  if (loadingToday) {
+  if (loadingToday || loadingSession) {
     return (
       <div className="mx-auto max-w-6xl space-y-6">
         <div className="space-y-3">
@@ -327,9 +382,7 @@ const SkillBuilder = () => {
         </div>
         <Card className="glow-card glow-border" hoverable={false}>
           <CardContent className="py-8">
-            <p className="text-sm text-muted-foreground">
-              Unable to load content. Please try again.
-            </p>
+            <p className="text-sm text-muted-foreground">Unable to load content. Please try again.</p>
           </CardContent>
         </Card>
       </div>
@@ -349,13 +402,18 @@ const SkillBuilder = () => {
           <Badge variant="outline" className="font-mono text-[11px] uppercase tracking-[0.14em]">
             Mastery {masteryItem?.mastery || 0}%
           </Badge>
+          {session?.finalScore !== null && session?.finalScore !== undefined ? (
+            <Badge variant="outline" className="font-mono text-[11px] uppercase tracking-[0.14em]">
+              Today {session.finalScore}/100
+            </Badge>
+          ) : null}
         </div>
 
         <div className="flex flex-col gap-4 lg:flex-row lg:items-end lg:justify-between">
           <div>
             <h1 className="text-3xl font-bold tracking-tight">Skill Builder</h1>
             <p className="mt-1 font-mono text-sm text-muted-foreground">
-              Today, go deeper with {topic.title.toLowerCase()} through guided learning, practice, and revision.
+              Today, go deeper with {topic.title.toLowerCase()} through guided learning, practice, revision, and challenge.
             </p>
           </div>
 
@@ -378,6 +436,8 @@ const SkillBuilder = () => {
             </div>
           </div>
         </div>
+
+        {sessionError ? <p className="text-sm text-muted-foreground">{sessionError}</p> : null}
       </div>
 
       <div className="grid gap-4 xl:grid-cols-[1.1fr_0.9fr]">
@@ -409,11 +469,13 @@ const SkillBuilder = () => {
             <div className="rounded-[12px] border border-border bg-muted/10 p-4">
               <p className="text-xs uppercase tracking-[0.18em] text-muted-foreground">How To Write It</p>
               <div className="mt-3 space-y-3">
-                {(guide.steps.length > 0 ? guide.steps : [
-                  "Start with the main image or idea you want to express.",
-                  "Shape it so the technique is easy to notice.",
-                  "Add enough context for the writing to feel alive.",
-                ]).map((step, index) => (
+                {(guide.steps.length > 0
+                  ? guide.steps
+                  : [
+                      "Start with the main image or idea you want to express.",
+                      "Shape it so the technique is easy to notice.",
+                      "Add enough context for the writing to feel alive.",
+                    ]).map((step, index) => (
                   <div key={step} className="flex items-start gap-3 text-sm leading-6">
                     <div className="mt-0.5 flex h-6 w-6 shrink-0 items-center justify-center rounded-[8px] bg-neon-cyan/10 text-xs font-semibold text-neon-cyan">
                       {index + 1}
@@ -436,8 +498,13 @@ const SkillBuilder = () => {
             </div>
 
             {!sessionState.learn ? (
-              <Button type="button" variant="secondary" onClick={() => markStep("learn", "write")}>
-                Mark Learn Complete
+              <Button
+                type="button"
+                variant="secondary"
+                disabled={persistingStep === "learn"}
+                onClick={() => void persistStep("learn", "write")}
+              >
+                {persistingStep === "learn" ? "Saving..." : "Mark Learn Complete"}
                 <ArrowRight className="h-4 w-4" />
               </Button>
             ) : (
@@ -493,9 +560,7 @@ const SkillBuilder = () => {
                   className="flex items-center justify-between rounded-[8px] border border-border bg-muted/10 px-3 py-3"
                 >
                   <div className="flex items-center gap-3">
-                    <span className="text-sm">
-                      {item.completed ? "✔" : "⬜"}
-                    </span>
+                    <span className="text-sm">{item.completed ? "✔" : "⬜"}</span>
                     <div>
                       <p className="text-sm font-medium">{item.title}</p>
                       <p className="text-xs text-muted-foreground">{item.status.replace("_", " ")}</p>
@@ -534,12 +599,13 @@ const SkillBuilder = () => {
                   setResult(null);
                   setCoachDraft("");
                 }}
+                disabled={isWriteLocked}
                 placeholder="Write 2-3 sentences here..."
                 className="min-h-[220px] resize-none bg-background/40 text-base leading-7"
               />
               <div className="flex flex-wrap items-center justify-between gap-3 text-xs text-muted-foreground">
                 <span>{validation.wordCount} words · {validation.sentenceCount} sentences</span>
-                <span>{validation.message}</span>
+                <span>{isWriteLocked ? "Write step saved for today." : validation.message}</span>
               </div>
             </div>
 
@@ -549,11 +615,9 @@ const SkillBuilder = () => {
               disabled={!canSubmit}
               onClick={() => void handleSubmit()}
             >
-              {isSubmitting ? "Evaluating..." : "Submit & Evaluate"}
+              {isSubmitting ? "Evaluating..." : isWriteLocked ? "Write Step Complete" : "Submit & Evaluate"}
               <ArrowRight className="h-4 w-4" />
             </Button>
-
-            {error ? <p className="text-sm text-muted-foreground">Submission failed. Try again.</p> : null}
           </CardContent>
         </Card>
 
@@ -566,43 +630,49 @@ const SkillBuilder = () => {
           </CardHeader>
           <CardContent className="space-y-4">
             <div className="rounded-[12px] bg-muted/20 p-4 text-sm leading-7 text-muted-foreground">
-              Improve the same idea with stronger imagery, more context, and better flow.
+              Deterministic rewrite engine: stronger detail, clearer subject, tighter context.
+            </div>
+
+            <div className="space-y-2 rounded-[12px] border border-border bg-muted/10 p-4">
+              {improvementChecklist.map((item) => (
+                <p key={item} className="text-sm text-muted-foreground">
+                  {item}
+                </p>
+              ))}
             </div>
 
             <Button
               type="button"
               variant="secondary"
               className="w-full"
-              disabled={!content.trim() || improving}
+              disabled={!content.trim() || improving || isImproveLocked}
               onClick={() => void handleCoachRewrite()}
             >
-              {improving ? "Rewriting..." : "Get Coach Rewrite"}
+              {improving ? "Building Rewrite..." : isImproveLocked ? "Improve Step Complete" : "Generate Rule-Based Rewrite"}
               <Sparkles className="h-4 w-4" />
             </Button>
-
-            {coachError ? <p className="text-xs text-muted-foreground">{coachError}</p> : null}
 
             {coachDraft ? (
               <div className="space-y-3 rounded-[12px] border border-border bg-muted/10 p-4">
                 <div className="flex items-center justify-between gap-3">
                   <p className="text-sm font-medium">Suggested rewrite</p>
                   <Badge variant="outline" className="font-mono text-[11px] uppercase tracking-[0.14em]">
-                    {coachMode === "ai" ? "AI Coach" : "Coach Draft"}
+                    Rule-based
                   </Badge>
                 </div>
                 <p className="text-sm leading-7">{coachDraft}</p>
                 <div className="flex flex-wrap gap-2">
-                  <Button type="button" onClick={handleAcceptCoachDraft}>
+                  <Button type="button" disabled={isImproveLocked} onClick={() => void completeImproveStep(true)}>
                     Accept Rewrite
                   </Button>
-                  <Button type="button" variant="secondary" onClick={() => markStep("improve", "challenge")}>
-                    Keep My Draft
+                  <Button type="button" variant="secondary" disabled={isImproveLocked} onClick={() => void completeImproveStep(false)}>
+                    Keep Draft
                   </Button>
                 </div>
               </div>
             ) : (
               <p className="text-sm text-muted-foreground">
-                Submit a draft or paste one into the box to unlock a stronger version.
+                Generate a rewrite after Step 2 to get concrete, repeatable improvement guidance.
               </p>
             )}
           </CardContent>
@@ -654,7 +724,7 @@ const SkillBuilder = () => {
                 <p className="mt-2 text-sm leading-7">{result.entry.content}</p>
               </div>
               <div className="rounded-[12px] bg-muted/20 p-4">
-                <p className="text-xs uppercase tracking-[0.18em] text-muted-foreground">Weak Parts To Fix</p>
+                <p className="text-xs uppercase tracking-[0.18em] text-muted-foreground">Actionable Fixes</p>
                 <div className="mt-2 space-y-2">
                   {result.evaluation.weakParts.length > 0 ? (
                     result.evaluation.weakParts.map((item) => (
@@ -664,7 +734,7 @@ const SkillBuilder = () => {
                     ))
                   ) : (
                     <p className="text-sm leading-6 text-muted-foreground">
-                      Clean structure and clarity. Push vividness if you want a stronger score.
+                      Add a setting, one stronger adjective, and one more descriptive detail if you want to push the score higher.
                     </p>
                   )}
                 </div>
@@ -697,8 +767,9 @@ const SkillBuilder = () => {
                         key={option.id}
                         type="button"
                         variant="secondary"
+                        disabled={isChallengeLocked}
                         className="justify-start"
-                        onClick={() => handleChallengeSubmit(option.id)}
+                        onClick={() => void handleChallengeSubmit(option.id)}
                       >
                         {option.label}
                       </Button>
@@ -709,11 +780,12 @@ const SkillBuilder = () => {
                     <Textarea
                       value={challengeResponse}
                       onChange={(event) => setChallengeResponse(event.target.value)}
+                      disabled={isChallengeLocked}
                       placeholder="Write your challenge response here..."
                       className="min-h-[150px] resize-none bg-background/40 text-base leading-7"
                     />
-                    <Button type="button" onClick={() => handleChallengeSubmit()}>
-                      Complete Challenge
+                    <Button type="button" disabled={isChallengeLocked} onClick={() => void handleChallengeSubmit()}>
+                      {isChallengeLocked ? "Challenge Complete" : "Complete Challenge"}
                     </Button>
                   </div>
                 )}
@@ -722,9 +794,14 @@ const SkillBuilder = () => {
                   <p className="text-xs text-muted-foreground">Example: {challengeTask.sampleAnswer}</p>
                 ) : null}
 
-                {challengeFeedback ? (
-                  <div className="rounded-[12px] border border-border bg-muted/10 p-4 text-sm text-muted-foreground">
-                    {challengeFeedback}
+                {challengeResult ? (
+                  <div className="space-y-3 rounded-[12px] border border-border bg-muted/10 p-4">
+                    <p className="text-sm font-medium">Challenge scored</p>
+                    <p className="text-sm text-muted-foreground">{challengeResult.evaluation.feedback}</p>
+                    <div className="flex flex-wrap gap-3 text-sm">
+                      <span>Challenge: {challengeResult.evaluation.score}/100</span>
+                      <span>Final: {challengeResult.finalScore}/100</span>
+                    </div>
                   </div>
                 ) : null}
               </>
@@ -842,7 +919,7 @@ const SkillBuilder = () => {
           </CardHeader>
           <CardContent>
             <p className="text-3xl font-bold font-mono">{masteryItem?.mastery || 0}%</p>
-            <p className="mt-1 text-xs text-muted-foreground">based on attempts, scores, and SRS stage</p>
+            <p className="mt-1 text-xs text-muted-foreground">based on attempts, scores, challenge results, and SRS stage</p>
           </CardContent>
         </Card>
       </div>

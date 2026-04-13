@@ -1,8 +1,11 @@
 import {
+  getLearningSessionToday,
   getLearningProgress,
   getLearningToday,
+  submitSkillBuilderChallenge,
   submitSkillBuilderWriting,
   submitLearningReview,
+  updateLearningSession,
 } from "../services/learning/engine.js";
 
 const resolveLearningUserId = (request) => {
@@ -117,6 +120,88 @@ export const getLearningProgressSummary = async (request, response, next) => {
       success: true,
       userId,
       progress: payload,
+    });
+  } catch (error) {
+    next(error);
+  }
+};
+
+export const getTodaySession = async (request, response, next) => {
+  try {
+    const userId = resolveLearningUserId(request);
+    const payload = await getLearningSessionToday(userId);
+
+    response.status(200).json({
+      success: true,
+      userId,
+      ...payload,
+    });
+  } catch (error) {
+    next(error);
+  }
+};
+
+export const updateSession = async (request, response, next) => {
+  try {
+    const userId = resolveLearningUserId(request);
+    const topicId = typeof request.body?.topicId === "string" ? request.body.topicId.trim() : "";
+    const step = typeof request.body?.step === "string" ? request.body.step.trim() : "";
+    const completed = request.body?.completed !== false;
+    const date = typeof request.body?.date === "string" ? request.body.date.trim() : undefined;
+
+    if (!topicId) {
+      response.status(400).json({
+        success: false,
+        error: "topicId is required.",
+      });
+      return;
+    }
+
+    const payload = await updateLearningSession({
+      userId,
+      topicId,
+      step,
+      completed,
+      date,
+    });
+
+    response.status(200).json({
+      success: true,
+      userId,
+      ...payload,
+    });
+  } catch (error) {
+    next(error);
+  }
+};
+
+export const submitChallenge = async (request, response, next) => {
+  try {
+    const userId = resolveLearningUserId(request);
+    const topicId = typeof request.body?.topicId === "string" ? request.body.topicId.trim() : "";
+    const content = typeof request.body?.content === "string" ? request.body.content : "";
+    const challengeScore =
+      typeof request.body?.challengeScore === "number" ? request.body.challengeScore : undefined;
+
+    if (!topicId) {
+      response.status(400).json({
+        success: false,
+        error: "topicId is required.",
+      });
+      return;
+    }
+
+    const payload = await submitSkillBuilderChallenge({
+      userId,
+      topicId,
+      content,
+      challengeScore,
+    });
+
+    response.status(200).json({
+      success: true,
+      userId,
+      ...payload,
     });
   } catch (error) {
     next(error);

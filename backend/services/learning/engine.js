@@ -6,8 +6,10 @@ import {
 } from "./scheduler.js";
 import { getNextStage, createStagePayload } from "./stages.js";
 import {
+  readLearningSessionsStore,
   readLearningProgressStore,
   readSkillBuilderEntriesStore,
+  writeLearningSessionsStore,
   writeLearningProgressStore,
   writeSkillBuilderEntriesStore,
 } from "./store.js";
@@ -20,6 +22,12 @@ const MIN_WORDS = 18;
 const MIN_SENTENCES = 2;
 const MAX_SENTENCES = 3;
 const WINDOW_DAYS = 30;
+const DEFAULT_SESSION_STEPS = {
+  learn: false,
+  write: false,
+  improve: false,
+  challenge: false,
+};
 const IMAGERY_WORDS = new Set([
   "bright",
   "dark",
@@ -181,24 +189,47 @@ const getCreativityLabel = (score) => {
 
 const getClarityLabel = (score) => (score >= 70 ? "clear" : "needs_detail");
 
+const buildActionableTips = ({ topic, hasRequiredStructure, sentenceCount, wordCount, clarityScore }) => {
+  const tips = [];
+
+  if (!hasRequiredStructure) {
+    tips.push(getStructureHint(topic));
+  }
+
+  if (sentenceCount < MIN_SENTENCES) {
+    tips.push("Add a second sentence so the technique has space to develop.");
+  }
+
+  if (wordCount < MIN_WORDS) {
+    tips.push("Add a setting so the reader knows where the moment happens.");
+    tips.push("Use one stronger adjective or comparison word.");
+  }
+
+  if (clarityScore < 70) {
+    tips.push("Add one more descriptive detail that supports the same image.");
+  }
+
+  return [...new Set(tips)];
+};
+
 const buildFeedback = ({ topic, structureScore, creativityScore, clarityScore, weakParts }) => {
   if (structureScore < 70) {
     return `${topic.title} is not landing clearly yet. ${weakParts[0] || getStructureHint(topic)}`;
   }
 
   if (creativityScore >= 75 && clarityScore >= 70) {
-    return "Strong control. The image is clear, vivid, and easy to follow.";
+    return "Clear control. Keep the same idea, then sharpen it with one more specific image or setting detail.";
   }
 
   if (creativityScore < 60) {
-    return "The technique is there, but the image still feels basic. Push the scene with more specific detail.";
+    return "The technique is there, but the image still feels basic. Add a setting, a stronger adjective, and one more concrete detail.";
   }
 
   if (clarityScore < 70) {
-    return "You have a promising idea. Tighten the flow so each sentence lands more cleanly.";
+    return "You have a promising idea. Tighten the flow and make every sentence support the same image.";
   }
 
-  return "Good control overall. One more pass for detail would make it even stronger.";
+  return "Good control overall. One more pass for setting and detail would make it stronger.";
 };
 
 const evaluateWriting = ({ topic, content }) => {
@@ -240,12 +271,14 @@ const evaluateWriting = ({ topic, content }) => {
     structureScore * 0.45 + creativityScore * 0.3 + clarityScore * 0.25,
   );
 
-  const weakParts = [];
-  if (!hasRequiredStructure) weakParts.push(getStructureHint(topic));
-  if (sentenceCount < MIN_SENTENCES) weakParts.push("Stretch this into at least 2 connected sentences.");
+  const weakParts = buildActionableTips({
+    topic,
+    hasRequiredStructure,
+    sentenceCount,
+    wordCount,
+    clarityScore,
+  });
   if (sentenceCount > MAX_SENTENCES) weakParts.push("Keep it to 2-3 sentences so the idea stays focused.");
-  if (wordCount < MIN_WORDS) weakParts.push("Add more concrete detail so the image has room to breathe.");
-  if (clarityScore < 70) weakParts.push("Tighten the flow so each sentence feels easier to follow.");
 
   const tags = [];
   if (structureScore >= 70) tags.push("correct");
@@ -417,6 +450,39 @@ const normalizeSkillBuilderEntry = (value, fallbackIndex) => {
   };
 };
 
+const normalizeSessionRecord = (value, fallbackIndex) => {
+  const record = value && typeof value === "object" ? value : {};
+  const steps = record.steps && typeof record.steps === "object" ? record.steps : {};
+
+  return {
+    id: String(record.id || `learning-session-${fallbackIndex + 1}`),
+    user_id: String(record.user_id || "local-workspace"),
+    date: DATE_KEY_PATTERN.test(String(record.date || "")) ? String(record.date) : toDateKey(),
+    topic_id: String(record.topic_id || ""),
+    steps: {
+      learn: Boolean(steps.learn),
+      write: Boolean(steps.write),
+      improve: Boolean(steps.improve),
+      challenge: Boolean(steps.challenge),
+    },
+    write_score:
+      typeof record.write_score === "number" && Number.isFinite(record.write_score)
+        ? clampScore(record.write_score)
+        : null,
+    challenge_score:
+      typeof record.challenge_score === "number" && Number.isFinite(record.challenge_score)
+        ? clampScore(record.challenge_score)
+        : null,
+    final_score:
+      typeof record.final_score === "number" && Number.isFinite(record.final_score)
+        ? clampScore(record.final_score)
+        : null,
+    completed: Boolean(record.completed),
+    created_at: String(record.created_at || new Date().toISOString()),
+    updated_at: String(record.updated_at || new Date().toISOString()),
+  };
+};
+
 const readUserProgress = async (userId) => {
   const store = await readLearningProgressStore();
   return store.map(normalizeProgressRecord).filter((record) => record.user_id === userId);
@@ -450,6 +516,60 @@ const writeUserSkillBuilderEntries = async (userId, entries) => {
   await writeSkillBuilderEntriesStore(nextStore);
 };
 
+const readUserLearningSessions = async (userId) => {
+  const store = await readLearningSessionsStore();
+  return store
+    .map(normalizeSessionRecord)
+    .filter((record) => record.user_id === userId)
+    .sort((left, right) => right.date.localeCompare(left.date));
+};
+
+const writeUserLearningSessions = async (userId, sessions) => {
+  const store = await readLearningSessionsStore();
+  const nextStore = store
+    .map(normalizeSessionRecord)
+    .filter((record) => record.user_id !== userId)
+    .concat(sessions);
+
+  await writeLearningSessionsStore(nextStore);
+};
+
+const createSessionSnapshot = (session, topicId, dateKey = toDateKey()) =>
+  normalizeSessionRecord(
+    {
+      id: session?.id || crypto.randomUUID(),
+      user_id: session?.user_id || "local-workspace",
+      date: session?.date || dateKey,
+      topic_id: topicId || session?.topic_id || "",
+      steps: {
+        ...DEFAULT_SESSION_STEPS,
+        ...(session?.steps || {}),
+      },
+      write_score: session?.write_score ?? null,
+      challenge_score: session?.challenge_score ?? null,
+      final_score: session?.final_score ?? null,
+      completed: Boolean(session?.completed),
+      created_at: session?.created_at || new Date().toISOString(),
+      updated_at: new Date().toISOString(),
+    },
+    0,
+  );
+
+const getTodaySessionRecord = (sessions, topicId, dateKey = toDateKey()) =>
+  sessions.find((session) => session.date === dateKey && (!topicId || session.topic_id === topicId)) ||
+  sessions.find((session) => session.date === dateKey) ||
+  null;
+
+const persistSession = async ({ userId, sessions, session }) => {
+  const nextSessions = sessions
+    .filter((item) => item.id !== session.id)
+    .concat(session)
+    .sort((left, right) => right.date.localeCompare(left.date));
+
+  await writeUserLearningSessions(userId, nextSessions);
+  return nextSessions;
+};
+
 const buildThemeSummary = (curriculum, progressByTopicId) => {
   const grouped = new Map();
 
@@ -481,16 +601,28 @@ const buildThemeSummary = (curriculum, progressByTopicId) => {
   }));
 };
 
-const getLearningStreak = (records, entries = []) => {
+const getLearningStreak = (records, entries = [], sessions = []) => {
   const dayKeys = Array.from(
     new Set(
       records
         .flatMap((record) => record.review_history.map((entry) => entry.date).filter(Boolean))
         .concat(entries.map((entry) => toSafeDateKey(entry.created_at)).filter(Boolean)),
     ),
-  ).sort();
+  )
+    .concat(
+      sessions
+        .filter(
+          (session) =>
+            session.steps.learn ||
+            session.steps.write ||
+            session.steps.improve ||
+            session.steps.challenge,
+        )
+        .map((session) => session.date),
+    );
+  const uniqueDayKeys = Array.from(new Set(dayKeys)).sort();
 
-  if (dayKeys.length === 0) {
+  if (uniqueDayKeys.length === 0) {
     return { current: 0, longest: 0 };
   }
 
@@ -498,7 +630,7 @@ const getLearningStreak = (records, entries = []) => {
   let running = 0;
   let previousDate = null;
 
-  dayKeys.forEach((dayKey) => {
+  uniqueDayKeys.forEach((dayKey) => {
     if (!previousDate) {
       running = 1;
     } else {
@@ -513,7 +645,7 @@ const getLearningStreak = (records, entries = []) => {
   let current = 0;
   let cursor = toDateKey();
 
-  while (dayKeys.includes(cursor)) {
+  while (uniqueDayKeys.includes(cursor)) {
     current += 1;
     cursor = addDays(cursor, -1);
   }
@@ -571,8 +703,8 @@ const buildStageBreakdown = (curriculum, progressByTopicId) => {
   return counters;
 };
 
-const getTopicMastery = (record, topicEntries) => {
-  if (!record && topicEntries.length === 0) return 0;
+const getTopicMastery = (record, topicEntries, topicSessions = []) => {
+  if (!record && topicEntries.length === 0 && topicSessions.length === 0) return 0;
 
   const stageWeights = {
     learn: 30,
@@ -581,11 +713,14 @@ const getTopicMastery = (record, topicEntries) => {
     mastered: 100,
   };
   const stageScore = record ? stageWeights[record.stage] || 0 : 0;
+  const combinedScores = topicEntries
+    .map((entry) => entry.evaluation_score)
+    .concat(topicSessions.map((session) => session.final_score).filter((score) => typeof score === "number"));
   const avgScore =
-    topicEntries.length > 0
-      ? topicEntries.reduce((sum, entry) => sum + entry.evaluation_score, 0) / topicEntries.length
+    combinedScores.length > 0
+      ? combinedScores.reduce((sum, score) => sum + score, 0) / combinedScores.length
       : 0;
-  const attemptsBoost = Math.min(topicEntries.length * 6, 20);
+  const attemptsBoost = Math.min((topicEntries.length + topicSessions.length) * 6, 20);
 
   return clampScore(stageScore * 0.6 + avgScore * 0.25 + attemptsBoost);
 };
@@ -604,11 +739,14 @@ const getTrendDirection = (scores) => {
   return "steady";
 };
 
-const buildLearningPath = (curriculum, progressByTopicId, entries) =>
+const buildLearningPath = (curriculum, progressByTopicId, entries, sessions) =>
   curriculum.map((topic) => {
     const record = progressByTopicId.get(topic.id) || null;
     const topicEntries = entries.filter((entry) => entry.topic_id === topic.id);
-    const mastery = getTopicMastery(record, topicEntries);
+    const topicSessions = sessions.filter(
+      (session) => session.topic_id === topic.id && typeof session.final_score === "number",
+    );
+    const mastery = getTopicMastery(record, topicEntries, topicSessions);
 
     return {
       topicId: topic.id,
@@ -626,16 +764,30 @@ const buildLearningPath = (curriculum, progressByTopicId, entries) =>
     };
   });
 
-const buildSkillBuilderInsights = (curriculum, records, entries) => {
+const buildSkillBuilderInsights = (curriculum, records, entries, sessions) => {
   const entriesByTopicId = new Map();
   const heatmap = Array.from({ length: WINDOW_DAYS }, (_, index) => {
     const dateKey = addDays(toDateKey(), -(WINDOW_DAYS - index - 1));
-    const count = entries.filter((entry) => toSafeDateKey(entry.created_at) === dateKey).length;
+    const session = sessions.find((item) => item.date === dateKey) || null;
+    const count = session
+      ? session.completed
+        ? 2
+        : 1
+      : entries.filter((entry) => toSafeDateKey(entry.created_at) === dateKey).length;
 
     return {
       date: dateKey,
       count,
-      level: count === 0 ? 0 : count === 1 ? 1 : count <= 3 ? 2 : 3,
+      level:
+        count === 0
+          ? 0
+          : session?.completed
+            ? session.final_score >= 85
+              ? 3
+              : 2
+            : count === 1
+              ? 1
+              : 2,
     };
   });
 
@@ -649,24 +801,32 @@ const buildSkillBuilderInsights = (curriculum, records, entries) => {
     .map(([topicId, topicEntries]) => {
       const topic = curriculum.find((item) => item.id === topicId);
       const record = records.find((item) => item.topic_id === topicId) || null;
+      const topicSessions = sessions.filter(
+        (session) => session.topic_id === topicId && typeof session.final_score === "number",
+      );
+      const combinedScores = topicEntries
+        .map((entry) => entry.evaluation_score)
+        .concat(topicSessions.map((session) => session.final_score));
       const avgScore =
-        topicEntries.length > 0
+        combinedScores.length > 0
           ? Math.round(
-              topicEntries.reduce((sum, entry) => sum + entry.evaluation_score, 0) /
-                topicEntries.length,
+              combinedScores.reduce((sum, score) => sum + score, 0) / combinedScores.length,
             )
           : 0;
-      const recentScores = topicEntries.slice(0, 5).map((entry) => entry.evaluation_score);
+      const recentScores = combinedScores.slice(0, 5);
 
       return topic
         ? {
             topicId,
             title: topic.title,
             themeTitle: topic.themeTitle,
-            attempts: topicEntries.length,
+            attempts: topicEntries.length + topicSessions.length,
             avgScore,
-            latestScore: topicEntries[0]?.evaluation_score || 0,
-            mastery: getTopicMastery(record, topicEntries),
+            latestScore:
+              topicEntries[0]?.evaluation_score ||
+              topicSessions[0]?.final_score ||
+              0,
+            mastery: getTopicMastery(record, topicEntries, topicSessions),
             trend: getTrendDirection(recentScores),
           }
         : null;
@@ -674,9 +834,12 @@ const buildSkillBuilderInsights = (curriculum, records, entries) => {
     .filter(Boolean)
     .sort((left, right) => left.title.localeCompare(right.title));
 
+  const allInsightScores = entries
+    .map((entry) => entry.evaluation_score)
+    .concat(sessions.map((session) => session.final_score).filter((score) => typeof score === "number"));
   const avgScore =
-    entries.length > 0
-      ? Math.round(entries.reduce((sum, entry) => sum + entry.evaluation_score, 0) / entries.length)
+    allInsightScores.length > 0
+      ? Math.round(allInsightScores.reduce((sum, score) => sum + score, 0) / allInsightScores.length)
       : 0;
   const recentAttempts = entries.slice(0, 5).map((entry) => {
     const topic = curriculum.find((item) => item.id === entry.topic_id);
@@ -707,11 +870,21 @@ const buildSkillBuilderInsights = (curriculum, records, entries) => {
         recommendation: `Practice ${topic.title.toLowerCase()} with a clearer image and more context.`,
       })),
     recentAttempts,
-    trend: getTrendDirection(entries.slice(0, 6).map((entry) => entry.evaluation_score)),
+    trend: getTrendDirection(
+      entries
+        .slice(0, 6)
+        .map((entry) => entry.evaluation_score)
+        .concat(
+          sessions
+            .slice(0, 6)
+            .map((session) => session.final_score)
+            .filter((score) => typeof score === "number"),
+        ),
+    ),
   };
 };
 
-const buildActivityHeatmap = (records, entries = [], windowDays = WINDOW_DAYS) =>
+const buildActivityHeatmap = (records, entries = [], sessions = [], windowDays = WINDOW_DAYS) =>
   Array.from({ length: windowDays }, (_, index) => {
     const dateKey = addDays(toDateKey(), -(windowDays - index - 1));
     const reviewCount = records.reduce(
@@ -720,23 +893,34 @@ const buildActivityHeatmap = (records, entries = [], windowDays = WINDOW_DAYS) =
       0,
     );
     const entryCount = entries.filter((entry) => toSafeDateKey(entry.created_at) === dateKey).length;
-    const count = reviewCount + entryCount;
+    const session = sessions.find((item) => item.date === dateKey) || null;
+    const sessionCount = session ? (session.completed ? 2 : 1) : 0;
+    const count = Math.max(sessionCount, reviewCount + entryCount);
 
     return {
       date: dateKey,
       count,
-      level: count === 0 ? 0 : count === 1 ? 1 : count <= 3 ? 2 : 3,
+      level:
+        count === 0
+          ? 0
+          : session?.completed
+            ? session.final_score >= 85
+              ? 3
+              : 2
+            : count === 1
+              ? 1
+              : 2,
     };
   });
 
-const buildProgressSummary = (curriculum, records, entries = []) => {
+const buildProgressSummary = (curriculum, records, entries = [], sessions = []) => {
   const progressByTopicId = new Map(records.map((record) => [record.topic_id, record]));
   const stageBreakdown = buildStageBreakdown(curriculum, progressByTopicId);
-  const streak = getLearningStreak(records, entries);
+  const streak = getLearningStreak(records, entries, sessions);
   const themes = buildThemeSummary(curriculum, progressByTopicId);
   const activeTheme = themes.find((theme) => theme.status !== "completed") || themes[0] || null;
-  const learningPath = buildLearningPath(curriculum, progressByTopicId, entries);
-  const skillBuilderInsights = buildSkillBuilderInsights(curriculum, records, entries);
+  const learningPath = buildLearningPath(curriculum, progressByTopicId, entries, sessions);
+  const skillBuilderInsights = buildSkillBuilderInsights(curriculum, records, entries, sessions);
 
   return {
     totalTopics: curriculum.length,
@@ -748,7 +932,7 @@ const buildProgressSummary = (curriculum, records, entries = []) => {
     stageBreakdown,
     themes,
     activeTheme,
-    heatmap: buildActivityHeatmap(records, entries),
+    heatmap: buildActivityHeatmap(records, entries, sessions),
     learningPath,
     skillBuilderInsights,
   };
@@ -828,14 +1012,37 @@ const buildTodayPayload = (curriculum, records) => {
   };
 };
 
+const getTodayTopicId = (todayPayload) =>
+  todayPayload?.application?.topicId ||
+  todayPayload?.new?.topicId ||
+  todayPayload?.reviews?.[0]?.topicId ||
+  "";
+
+const buildSessionResponse = ({ session, topicId, dateKey = toDateKey() }) => {
+  const nextSession = createSessionSnapshot(session, topicId, dateKey);
+
+  return {
+    id: nextSession.id,
+    date: nextSession.date,
+    topicId: nextSession.topic_id,
+    steps: nextSession.steps,
+    writeScore: nextSession.write_score,
+    challengeScore: nextSession.challenge_score,
+    finalScore: nextSession.final_score,
+    completed: nextSession.completed,
+  };
+};
+
 export const getLearningToday = async (userId) => {
   const curriculum = await readCurriculum();
   const records = await readUserProgress(userId);
   const entries = await readUserSkillBuilderEntries(userId);
+  const sessions = await readUserLearningSessions(userId);
+  const todayPayload = buildTodayPayload(curriculum, records);
 
   return {
-    today: buildTodayPayload(curriculum, records),
-    progress: buildProgressSummary(curriculum, records, entries),
+    today: todayPayload,
+    progress: buildProgressSummary(curriculum, records, entries, sessions),
   };
 };
 
@@ -843,8 +1050,48 @@ export const getLearningProgress = async (userId) => {
   const curriculum = await readCurriculum();
   const records = await readUserProgress(userId);
   const entries = await readUserSkillBuilderEntries(userId);
+  const sessions = await readUserLearningSessions(userId);
 
-  return buildProgressSummary(curriculum, records, entries);
+  return buildProgressSummary(curriculum, records, entries, sessions);
+};
+
+export const getLearningSessionToday = async (userId) => {
+  const curriculum = await readCurriculum();
+  const records = await readUserProgress(userId);
+  const sessions = await readUserLearningSessions(userId);
+  const todayPayload = buildTodayPayload(curriculum, records);
+  const topicId = getTodayTopicId(todayPayload);
+  const session = getTodaySessionRecord(sessions, topicId);
+
+  return {
+    session: buildSessionResponse({ session, topicId }),
+  };
+};
+
+export const updateLearningSession = async ({ userId, topicId, step, completed = true, date }) => {
+  const dateKey = DATE_KEY_PATTERN.test(String(date || "")) ? String(date) : toDateKey();
+  const curriculum = await readCurriculum();
+  const records = await readUserProgress(userId);
+  const entries = await readUserSkillBuilderEntries(userId);
+  const sessions = await readUserLearningSessions(userId);
+  const existingSession = getTodaySessionRecord(sessions, topicId, dateKey);
+  const nextSession = createSessionSnapshot(existingSession, topicId, dateKey);
+
+  if (step && Object.prototype.hasOwnProperty.call(nextSession.steps, step)) {
+    nextSession.steps[step] = Boolean(completed);
+  }
+  nextSession.completed = Boolean(nextSession.steps.challenge);
+
+  const nextSessions = await persistSession({
+    userId,
+    sessions,
+    session: nextSession,
+  });
+
+  return {
+    session: buildSessionResponse({ session: nextSession, topicId, dateKey }),
+    progress: buildProgressSummary(curriculum, records, entries, nextSessions),
+  };
 };
 
 export const submitLearningReview = async ({ userId, topicId, performance }) => {
@@ -915,6 +1162,7 @@ export const submitLearningReview = async ({ userId, topicId, performance }) => 
 
   await writeUserProgress(userId, nextRecords);
   const entries = await readUserSkillBuilderEntries(userId);
+  const sessions = await readUserLearningSessions(userId);
 
   return {
     topicId,
@@ -924,7 +1172,7 @@ export const submitLearningReview = async ({ userId, topicId, performance }) => 
     intervalDays: nextRecord.interval_days,
     easeFactor: nextRecord.ease_factor,
     reinforcementTriggered: normalizedPerformance === "again",
-    progress: buildProgressSummary(curriculum, nextRecords, entries),
+    progress: buildProgressSummary(curriculum, nextRecords, entries, sessions),
   };
 };
 
@@ -953,6 +1201,7 @@ export const submitSkillBuilderWriting = async ({ userId, topicId, content }) =>
     performance,
   });
   const existingEntries = await readUserSkillBuilderEntries(userId);
+  const existingSessions = await readUserLearningSessions(userId);
   const now = new Date().toISOString();
   const entry = normalizeSkillBuilderEntry(
     {
@@ -972,6 +1221,15 @@ export const submitSkillBuilderWriting = async ({ userId, topicId, content }) =>
   );
   const nextEntries = [entry, ...existingEntries];
   const records = await readUserProgress(userId);
+  const existingSession = getTodaySessionRecord(existingSessions, topicId);
+  const nextSession = createSessionSnapshot(existingSession, topicId);
+  nextSession.steps.write = true;
+  nextSession.write_score = evaluation.score;
+  const nextSessions = await persistSession({
+    userId,
+    sessions: existingSessions,
+    session: nextSession,
+  });
 
   await writeUserSkillBuilderEntries(userId, nextEntries);
 
@@ -979,8 +1237,109 @@ export const submitSkillBuilderWriting = async ({ userId, topicId, content }) =>
     entry,
     evaluation,
     performance,
-    progress: buildProgressSummary(curriculum, records, nextEntries),
+    progress: buildProgressSummary(curriculum, records, nextEntries, nextSessions),
     stage: progressResult.stage,
     nextReview: progressResult.nextReview,
+    session: buildSessionResponse({ session: nextSession, topicId }),
+  };
+};
+
+export const submitSkillBuilderChallenge = async ({
+  userId,
+  topicId,
+  content,
+  challengeScore,
+}) => {
+  const curriculum = await readCurriculum();
+  const topic = curriculum.find((item) => item.id === topicId);
+
+  if (!topic) {
+    const error = new Error("Learning topic not found.");
+    error.statusCode = 404;
+    throw error;
+  }
+
+  const existingEntries = await readUserSkillBuilderEntries(userId);
+  const existingSessions = await readUserLearningSessions(userId);
+  const existingSession = getTodaySessionRecord(existingSessions, topicId);
+  const records = await readUserProgress(userId);
+  const trimmedContent = String(content || "").trim();
+
+  let evaluation;
+
+  if (trimmedContent) {
+    evaluation = evaluateWriting({ topic, content: trimmedContent });
+  } else {
+    const numericChallengeScore =
+      typeof challengeScore === "number" && Number.isFinite(challengeScore)
+        ? clampScore(challengeScore)
+        : 0;
+    evaluation = {
+      score: numericChallengeScore,
+      tags: numericChallengeScore >= 80 ? ["correct", "challenge"] : ["needs improvement", "challenge"],
+      feedback:
+        numericChallengeScore >= 80
+          ? "Challenge complete. You recognized the pattern correctly."
+          : "Challenge complete, but the pattern needs another pass.",
+      suggestion:
+        numericChallengeScore >= 80
+          ? "Keep the same control in your next writing round."
+          : "Review the concept guide once, then try a fresh example.",
+      breakdown: {
+        structure: {
+          score: numericChallengeScore,
+          label: numericChallengeScore >= 80 ? "correct" : "needs_work",
+          detail:
+            numericChallengeScore >= 80
+              ? `${topic.title} was identified correctly.`
+              : `Review the structure of ${topic.title} and try again.`,
+        },
+        creativity: {
+          score: numericChallengeScore,
+          label: numericChallengeScore >= 80 ? "clear" : "basic",
+          detail: "Recognition challenges focus on spotting the correct pattern.",
+        },
+        clarity: {
+          score: numericChallengeScore,
+          label: numericChallengeScore >= 80 ? "clear" : "needs_detail",
+          detail: "Use the concept guide examples to reinforce the pattern.",
+        },
+      },
+      weakParts:
+        numericChallengeScore >= 80
+          ? []
+          : [
+              "Review the core pattern once more before your next challenge.",
+              "Compare your answer with one of the concept guide examples.",
+            ],
+      metrics: {
+        wordCount: 0,
+        sentenceCount: 0,
+      },
+    };
+  }
+
+  const writeScore = existingSession?.write_score ?? null;
+  const finalScore =
+    typeof writeScore === "number"
+      ? clampScore((writeScore + evaluation.score) / 2)
+      : evaluation.score;
+  const nextSession = createSessionSnapshot(existingSession, topicId);
+  nextSession.steps.challenge = true;
+  nextSession.challenge_score = evaluation.score;
+  nextSession.final_score = finalScore;
+  nextSession.completed = true;
+
+  const nextSessions = await persistSession({
+    userId,
+    sessions: existingSessions,
+    session: nextSession,
+  });
+
+  return {
+    evaluation,
+    finalScore,
+    progress: buildProgressSummary(curriculum, records, existingEntries, nextSessions),
+    session: buildSessionResponse({ session: nextSession, topicId }),
   };
 };
