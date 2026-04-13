@@ -32,6 +32,21 @@ const readCurriculumFile = async (filename) => {
         examples: Array.isArray(topic.examples)
           ? topic.examples.map((example) => String(example))
           : [],
+        conceptGuide: {
+          what: String(topic.conceptGuide?.what || topic.definition || ""),
+          why: String(
+            topic.conceptGuide?.why ||
+              `Use ${String(topic.title || `topic ${index + 1}`).toLowerCase()} to make your writing more expressive.`,
+          ),
+          steps: Array.isArray(topic.conceptGuide?.steps)
+            ? topic.conceptGuide.steps.map((step) => String(step))
+            : [],
+          examples: Array.isArray(topic.conceptGuide?.examples)
+            ? topic.conceptGuide.examples.map((example) => String(example))
+            : Array.isArray(topic.examples)
+              ? topic.examples.map((example) => String(example))
+              : [],
+        },
         themeId,
         themeTitle,
       }))

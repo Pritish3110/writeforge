@@ -4,6 +4,21 @@
     "order": 1,
     "title": "Simile",
     "definition": "Comparison using like or as",
+    "conceptGuide": {
+      "what": "A simile compares one thing to another using words like \"like\" or \"as\".",
+      "why": "Similes make writing more vivid by helping readers picture a feeling, action, or image through something familiar.",
+      "steps": [
+        "Pick the thing you want the reader to notice.",
+        "Choose an image your reader already understands.",
+        "Connect them with \"like\" or \"as\".",
+        "Add a little context so the comparison feels alive in the sentence."
+      ],
+      "examples": [
+        "As brave as a lion",
+        "Runs like the wind",
+        "Her voice was as soft as falling rain"
+      ]
+    },
     "examples": [
       "As brave as a lion",
       "Runs like the wind"
@@ -14,6 +29,21 @@
     "order": 2,
     "title": "Metaphor",
     "definition": "Direct comparison without like or as",
+    "conceptGuide": {
+      "what": "A metaphor says one thing is another to create a strong, direct image.",
+      "why": "Metaphors compress emotion and meaning into a single striking comparison, which makes prose feel more memorable.",
+      "steps": [
+        "Decide what idea or feeling you want to sharpen.",
+        "Choose an image that captures that feeling.",
+        "State the comparison directly without using \"like\" or \"as\".",
+        "Let the image match the mood of the sentence."
+      ],
+      "examples": [
+        "Time is a thief",
+        "He is a rock",
+        "The classroom was a pressure cooker before the exam"
+      ]
+    },
     "examples": [
       "Time is a thief",
       "He is a rock"
@@ -24,6 +54,21 @@
     "order": 3,
     "title": "Personification",
     "definition": "Giving human qualities to non-human things",
+    "conceptGuide": {
+      "what": "Personification gives an object, place, idea, or force of nature a human action or feeling.",
+      "why": "It makes descriptions feel alive and emotional, especially when you want a setting to carry mood.",
+      "steps": [
+        "Choose a non-human thing in the scene.",
+        "Decide what feeling or action you want it to carry.",
+        "Give it a human action that fits the mood.",
+        "Keep the image natural enough to support the scene."
+      ],
+      "examples": [
+        "The wind whispered through the trees",
+        "Opportunity knocked at the door",
+        "The city yawned awake at sunrise"
+      ]
+    },
     "examples": [
       "The wind whispered through the trees",
       "Opportunity knocked at the door"
@@ -34,6 +79,21 @@
     "order": 4,
     "title": "Hyperbole",
     "definition": "Deliberate exaggeration for emphasis",
+    "conceptGuide": {
+      "what": "Hyperbole is an intentional exaggeration used to emphasize a feeling, reaction, or idea.",
+      "why": "It adds energy and emotion, helping a sentence sound more dramatic, funny, or urgent.",
+      "steps": [
+        "Start with a real feeling or situation.",
+        "Push it far beyond literal truth.",
+        "Make sure the exaggeration is easy to notice.",
+        "Use it where emphasis matters more than realism."
+      ],
+      "examples": [
+        "I have told you a million times",
+        "This bag weighs a ton",
+        "He waited forever for the bell to ring"
+      ]
+    },
     "examples": [
       "I have told you a million times",
       "This bag weighs a ton"
@@ -44,6 +104,21 @@
     "order": 5,
     "title": "Alliteration",
     "definition": "Repeated consonant sounds at the start of nearby words",
+    "conceptGuide": {
+      "what": "Alliteration repeats the same beginning sound in nearby words.",
+      "why": "It gives sentences rhythm and musicality, which makes a phrase more pleasing and memorable.",
+      "steps": [
+        "Choose the key mood or action in your sentence.",
+        "Pick a sound that fits that mood.",
+        "Find nearby words that begin with the same sound.",
+        "Keep the phrase readable so the sound play feels smooth."
+      ],
+      "examples": [
+        "Silver seas shimmered softly",
+        "Wild winds whipped westward",
+        "Busy bees buzzed by the balcony"
+      ]
+    },
     "examples": [
       "Silver seas shimmered softly",
       "Wild winds whipped westward"
@@ -54,6 +129,21 @@
     "order": 6,
     "title": "Onomatopoeia",
     "definition": "A word that imitates a sound",
+    "conceptGuide": {
+      "what": "Onomatopoeia uses words that sound like the noise they describe.",
+      "why": "It makes scenes more sensory by helping readers hear what is happening.",
+      "steps": [
+        "Notice the most important sound in the moment.",
+        "Pick a word that imitates that sound.",
+        "Place it where the reader will feel the sound immediately.",
+        "Use surrounding detail to make the sound matter in context."
+      ],
+      "examples": [
+        "The bees buzzed above the flowers",
+        "The bacon sizzled in the pan",
+        "The gate slammed shut with a clang"
+      ]
+    },
     "examples": [
       "The bees buzzed above the flowers",
       "The bacon sizzled in the pan"
@@ -64,6 +154,21 @@
     "order": 7,
     "title": "Oxymoron",
     "definition": "Two contradictory words placed together",
+    "conceptGuide": {
+      "what": "An oxymoron pairs opposite or contradictory words to create a layered meaning.",
+      "why": "It helps writers capture complicated emotions or ideas that are true in more than one way at once.",
+      "steps": [
+        "Choose the mixed feeling or idea you want to express.",
+        "Find two words that seem to clash.",
+        "Place them side by side so the contrast is immediate.",
+        "Use the phrase where emotional tension matters."
+      ],
+      "examples": [
+        "Deafening silence filled the room",
+        "It was a bittersweet farewell",
+        "They shared an open secret"
+      ]
+    },
     "examples": [
       "Deafening silence filled the room",
       "It was a bittersweet farewell"

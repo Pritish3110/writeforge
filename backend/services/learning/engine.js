@@ -16,6 +16,43 @@ const DEFAULT_EASE_FACTOR = 2.5;
 const DEFAULT_INTERVAL_DAYS = 1;
 const DATE_KEY_PATTERN = /^\d{4}-\d{2}-\d{2}$/;
 const WEAK_SCORE_THRESHOLD = 70;
+const MIN_WORDS = 18;
+const MIN_SENTENCES = 2;
+const MAX_SENTENCES = 3;
+const WINDOW_DAYS = 30;
+const IMAGERY_WORDS = new Set([
+  "bright",
+  "dark",
+  "golden",
+  "icy",
+  "silent",
+  "stormy",
+  "fierce",
+  "fragile",
+  "smoky",
+  "wild",
+  "gentle",
+  "glowing",
+  "raging",
+  "shivering",
+  "shimmering",
+  "thunder",
+  "shadow",
+  "river",
+  "fire",
+  "rain",
+  "wind",
+  "stone",
+  "glass",
+  "velvet",
+  "echo",
+  "dust",
+  "light",
+  "night",
+  "ocean",
+  "flame",
+  "whisper",
+]);
 
 const toDateKey = (value = new Date()) => value.toISOString().slice(0, 10);
 
@@ -30,6 +67,8 @@ const addDays = (dateKey, days) => {
   return toDateKey(date);
 };
 
+const clampScore = (value) => Math.min(Math.max(Math.round(value), 0), 100);
+
 const normalizePerformance = (value) => {
   if (value === "again" || value === "hard" || value === "good" || value === "easy") {
     return value;
@@ -38,13 +77,6 @@ const normalizePerformance = (value) => {
   return "good";
 };
 
-const countWords = (value) => {
-  const matches = String(value || "").match(/\b[\w']+\b/g);
-  return matches ? matches.length : 0;
-};
-
-const clampScore = (value) => Math.min(Math.max(Math.round(value), 0), 100);
-
 const scoreToPerformance = (score) => {
   if (score < 45) return "again";
   if (score < 70) return "hard";
@@ -52,11 +84,26 @@ const scoreToPerformance = (score) => {
   return "good";
 };
 
-const getFirstLetters = (content) =>
-  String(content || "")
+const countWords = (value) => {
+  const matches = String(value || "").match(/\b[\w']+\b/g);
+  return matches ? matches.length : 0;
+};
+
+const splitIntoSentences = (value) =>
+  String(value || "")
+    .trim()
+    .split(/(?<=[.!?])\s+/)
+    .map((sentence) => sentence.trim())
+    .filter(Boolean);
+
+const countSentences = (value) => splitIntoSentences(value).length;
+
+const getWordList = (value) =>
+  String(value || "")
     .toLowerCase()
-    .match(/\b[a-z][a-z']*\b/g)
-    ?.map((word) => word[0]) || [];
+    .match(/\b[a-z][a-z']*\b/g) || [];
+
+const getFirstLetters = (content) => getWordList(content).map((word) => word[0]);
 
 const hasAlliteration = (content) => {
   const letters = getFirstLetters(content);
@@ -78,15 +125,22 @@ const evaluateRequiredStructure = (topic, content) => {
   }
 
   if (topic.id === "metaphor") {
-    return /\b(is|are|was|were|becomes?|became)\b/i.test(content) && !/\b(like|as)\b/i.test(content);
+    return (
+      /\b(is|are|was|were|becomes?|became)\b/i.test(content) &&
+      !/\b(like|as)\b/i.test(content)
+    );
   }
 
   if (topic.id === "personification") {
-    return /\b(whispered|danced|sang|sighed|called|watched|slept|smiled|cried|argued|begged|waited)\b/i.test(content);
+    return /\b(whispered|danced|sang|sighed|called|watched|slept|smiled|cried|argued|begged|waited|stretched|yawned)\b/i.test(
+      content,
+    );
   }
 
   if (topic.id === "hyperbole") {
-    return /\b(million|billion|forever|never|always|ton|ocean|mountain|endless|starving|dying|impossible)\b/i.test(content);
+    return /\b(million|billion|forever|never|always|ton|ocean|mountain|endless|starving|dying|impossible)\b/i.test(
+      content,
+    );
   }
 
   if (topic.id === "alliteration") {
@@ -94,55 +148,156 @@ const evaluateRequiredStructure = (topic, content) => {
   }
 
   if (topic.id === "onomatopoeia") {
-    return /\b(bang|buzz|crash|sizzle|whisper|clang|pop|snap|boom|hiss|thud|tick|tock)\b/i.test(content);
+    return /\b(bang|buzz|crash|sizzle|whisper|clang|pop|snap|boom|hiss|thud|tick|tock)\b/i.test(
+      content,
+    );
   }
 
   if (topic.id === "oxymoron") {
-    return /\b(deafening silence|bittersweet|living dead|open secret|seriously funny|awfully good|small crowd)\b/i.test(normalized);
+    return /\b(deafening silence|bittersweet|living dead|open secret|seriously funny|awfully good|small crowd)\b/i.test(
+      normalized,
+    );
   }
 
   return countWords(content) >= 4;
 };
 
 const getStructureHint = (topic) => {
-  if (topic.id === "simile") return 'Try using "like" or "as" to make the comparison clear.';
-  if (topic.id === "metaphor") return 'Try making a direct comparison without "like" or "as".';
-  if (topic.id === "alliteration") return "Try repeating the same starting sound across nearby words.";
-  if (topic.id === "onomatopoeia") return "Try adding a word that imitates a sound.";
-  if (topic.id === "hyperbole") return "Try pushing the exaggeration further so the emphasis is unmistakable.";
-  if (topic.id === "personification") return "Try giving the object or idea a more human action.";
-  if (topic.id === "oxymoron") return "Try placing two contradictory ideas directly together.";
-  return `Try making ${topic.title.toLowerCase()} easier to spot in the sentence.`;
+  if (topic.id === "simile") return 'Use "like" or "as" so the comparison reads clearly.';
+  if (topic.id === "metaphor") return 'Make the comparison direct without using "like" or "as".';
+  if (topic.id === "alliteration") return "Repeat the same opening sound across nearby words.";
+  if (topic.id === "onomatopoeia") return "Add a word that the reader can almost hear.";
+  if (topic.id === "hyperbole") return "Push the exaggeration further so the emphasis is unmistakable.";
+  if (topic.id === "personification") return "Give the object or setting a more human action.";
+  if (topic.id === "oxymoron") return "Place the contradictory words right beside each other.";
+  return `Make ${topic.title.toLowerCase()} easier to spot in the writing.`;
+};
+
+const getCreativityLabel = (score) => {
+  if (score >= 75) return "vivid";
+  if (score >= 55) return "developing";
+  return "basic";
+};
+
+const getClarityLabel = (score) => (score >= 70 ? "clear" : "needs_detail");
+
+const buildFeedback = ({ topic, structureScore, creativityScore, clarityScore, weakParts }) => {
+  if (structureScore < 70) {
+    return `${topic.title} is not landing clearly yet. ${weakParts[0] || getStructureHint(topic)}`;
+  }
+
+  if (creativityScore >= 75 && clarityScore >= 70) {
+    return "Strong control. The image is clear, vivid, and easy to follow.";
+  }
+
+  if (creativityScore < 60) {
+    return "The technique is there, but the image still feels basic. Push the scene with more specific detail.";
+  }
+
+  if (clarityScore < 70) {
+    return "You have a promising idea. Tighten the flow so each sentence lands more cleanly.";
+  }
+
+  return "Good control overall. One more pass for detail would make it even stronger.";
 };
 
 const evaluateWriting = ({ topic, content }) => {
   const trimmedContent = String(content || "").trim();
   const wordCount = countWords(trimmedContent);
+  const sentenceCount = countSentences(trimmedContent);
+  const sentences = splitIntoSentences(trimmedContent);
   const hasRequiredStructure = evaluateRequiredStructure(topic, trimmedContent);
-  const hasUsefulLength = wordCount >= 7;
-  const score = clampScore(
-    trimmedContent
-      ? 35 + (hasRequiredStructure ? 45 : 0) + (hasUsefulLength ? 15 : 5) + (/[.!?]$/.test(trimmedContent) ? 5 : 0)
-      : 0,
+  const words = getWordList(trimmedContent);
+  const uniqueWords = new Set(words);
+  const lexicalDiversity = words.length > 0 ? uniqueWords.size / words.length : 0;
+  const imageryHits = words.filter((word) => IMAGERY_WORDS.has(word) || word.endsWith("ly")).length;
+  const punctuationComplete = /[.!?]$/.test(trimmedContent);
+  const sentenceLengths = sentences.map((sentence) => countWords(sentence));
+  const averageSentenceLength =
+    sentenceLengths.length > 0
+      ? sentenceLengths.reduce((sum, length) => sum + length, 0) / sentenceLengths.length
+      : 0;
+  const structureScore = clampScore(
+    (hasRequiredStructure ? 70 : 20) +
+      (sentenceCount >= MIN_SENTENCES && sentenceCount <= MAX_SENTENCES ? 20 : 0) +
+      (wordCount >= MIN_WORDS ? 10 : 0),
   );
-  const tags = [
-    score >= WEAK_SCORE_THRESHOLD ? "correct" : "needs_improvement",
-    hasRequiredStructure ? "structure_found" : "structure_missing",
-    hasUsefulLength ? "developing_detail" : "brief",
-  ];
-  const feedback = hasRequiredStructure
-    ? hasUsefulLength
-      ? "Good use of comparison. Try making the image even more vivid."
-      : "Good start. Try adding a little more detail so the image lands harder."
-    : `Sentence does not clearly use ${topic.title.toLowerCase()}. ${getStructureHint(topic)}`;
+  const creativityScore = clampScore(
+    25 +
+      Math.min(30, imageryHits * 6) +
+      Math.min(25, lexicalDiversity * 35) +
+      (wordCount >= MIN_WORDS ? 10 : 0) +
+      (wordCount >= 28 ? 10 : 0),
+  );
+  const clarityScore = clampScore(
+    35 +
+      (punctuationComplete ? 10 : 0) +
+      (sentenceCount >= MIN_SENTENCES && sentenceCount <= MAX_SENTENCES ? 25 : 0) +
+      (averageSentenceLength >= 7 && averageSentenceLength <= 22 ? 20 : 8) +
+      (lexicalDiversity >= 0.5 ? 10 : 0),
+  );
+  const score = clampScore(
+    structureScore * 0.45 + creativityScore * 0.3 + clarityScore * 0.25,
+  );
+
+  const weakParts = [];
+  if (!hasRequiredStructure) weakParts.push(getStructureHint(topic));
+  if (sentenceCount < MIN_SENTENCES) weakParts.push("Stretch this into at least 2 connected sentences.");
+  if (sentenceCount > MAX_SENTENCES) weakParts.push("Keep it to 2-3 sentences so the idea stays focused.");
+  if (wordCount < MIN_WORDS) weakParts.push("Add more concrete detail so the image has room to breathe.");
+  if (clarityScore < 70) weakParts.push("Tighten the flow so each sentence feels easier to follow.");
+
+  const tags = [];
+  if (structureScore >= 70) tags.push("correct");
+  if (score < WEAK_SCORE_THRESHOLD) tags.push("needs improvement");
+  if (creativityScore >= 75) tags.push("vivid");
+  if (creativityScore < 60) tags.push("basic");
+  if (clarityScore < 70) tags.push("needs detail");
 
   return {
     score,
     tags,
-    feedback,
-    suggestion: hasRequiredStructure
-      ? "Try adding more vivid comparison."
-      : getStructureHint(topic),
+    feedback: buildFeedback({
+      topic,
+      structureScore,
+      creativityScore,
+      clarityScore,
+      weakParts,
+    }),
+    suggestion:
+      weakParts[0] ||
+      "Keep the original idea, then add one more precise image to make it feel sharper.",
+    breakdown: {
+      structure: {
+        score: structureScore,
+        label: structureScore >= 70 ? "correct" : "needs_work",
+        detail:
+          structureScore >= 70
+            ? `${topic.title} is clearly visible in the writing.`
+            : getStructureHint(topic),
+      },
+      creativity: {
+        score: creativityScore,
+        label: getCreativityLabel(creativityScore),
+        detail:
+          creativityScore >= 75
+            ? "The imagery feels specific and memorable."
+            : "Add stronger sensory detail or a fresher image.",
+      },
+      clarity: {
+        score: clarityScore,
+        label: getClarityLabel(clarityScore),
+        detail:
+          clarityScore >= 70
+            ? "The writing reads smoothly and stays easy to follow."
+            : "Tighten the sentences so the meaning lands faster.",
+      },
+    },
+    weakParts,
+    metrics: {
+      wordCount,
+      sentenceCount,
+    },
   };
 };
 
@@ -206,6 +361,8 @@ const normalizeSkillBuilderEntry = (value, fallbackIndex) => {
     typeof record.evaluation_score === "number" && Number.isFinite(record.evaluation_score)
       ? clampScore(record.evaluation_score)
       : 0;
+  const breakdown = record.breakdown && typeof record.breakdown === "object" ? record.breakdown : {};
+  const metrics = record.metrics && typeof record.metrics === "object" ? record.metrics : {};
 
   return {
     id: String(record.id || `skill-builder-entry-${fallbackIndex + 1}`),
@@ -218,14 +375,51 @@ const normalizeSkillBuilderEntry = (value, fallbackIndex) => {
       ? record.tags.map((tag) => String(tag)).filter(Boolean)
       : [],
     feedback: String(record.feedback || ""),
+    breakdown: {
+      structure: {
+        score:
+          typeof breakdown.structure?.score === "number"
+            ? clampScore(breakdown.structure.score)
+            : 0,
+        label: String(breakdown.structure?.label || "needs_work"),
+        detail: String(breakdown.structure?.detail || ""),
+      },
+      creativity: {
+        score:
+          typeof breakdown.creativity?.score === "number"
+            ? clampScore(breakdown.creativity.score)
+            : 0,
+        label: String(breakdown.creativity?.label || "basic"),
+        detail: String(breakdown.creativity?.detail || ""),
+      },
+      clarity: {
+        score:
+          typeof breakdown.clarity?.score === "number"
+            ? clampScore(breakdown.clarity.score)
+            : 0,
+        label: String(breakdown.clarity?.label || "needs_detail"),
+        detail: String(breakdown.clarity?.detail || ""),
+      },
+    },
+    weak_parts: Array.isArray(record.weak_parts)
+      ? record.weak_parts.map((part) => String(part)).filter(Boolean)
+      : [],
+    metrics: {
+      wordCount:
+        typeof metrics.wordCount === "number" && Number.isFinite(metrics.wordCount)
+          ? metrics.wordCount
+          : countWords(record.content),
+      sentenceCount:
+        typeof metrics.sentenceCount === "number" && Number.isFinite(metrics.sentenceCount)
+          ? metrics.sentenceCount
+          : countSentences(record.content),
+    },
   };
 };
 
 const readUserProgress = async (userId) => {
   const store = await readLearningProgressStore();
-  return store
-    .map(normalizeProgressRecord)
-    .filter((record) => record.user_id === userId);
+  return store.map(normalizeProgressRecord).filter((record) => record.user_id === userId);
 };
 
 const writeUserProgress = async (userId, records) => {
@@ -242,7 +436,8 @@ const readUserSkillBuilderEntries = async (userId) => {
   const store = await readSkillBuilderEntriesStore();
   return store
     .map(normalizeSkillBuilderEntry)
-    .filter((record) => record.user_id === userId);
+    .filter((record) => record.user_id === userId)
+    .sort((left, right) => right.created_at.localeCompare(left.created_at));
 };
 
 const writeUserSkillBuilderEntries = async (userId, entries) => {
@@ -286,12 +481,12 @@ const buildThemeSummary = (curriculum, progressByTopicId) => {
   }));
 };
 
-const getLearningStreak = (records) => {
+const getLearningStreak = (records, entries = []) => {
   const dayKeys = Array.from(
     new Set(
-      records.flatMap((record) =>
-        record.review_history.map((entry) => entry.date).filter(Boolean),
-      ),
+      records
+        .flatMap((record) => record.review_history.map((entry) => entry.date).filter(Boolean))
+        .concat(entries.map((entry) => toSafeDateKey(entry.created_at)).filter(Boolean)),
     ),
   ).sort();
 
@@ -326,11 +521,14 @@ const getLearningStreak = (records) => {
   return { current, longest };
 };
 
-const buildWeakTopics = (curriculum, records) =>
+const buildWeakTopics = (curriculum, records, entries) =>
   records
     .map((record) => {
       const topic = curriculum.find((item) => item.id === record.topic_id);
-      const weaknessScore = record.again_count * 3 + record.hard_count * 2 - record.easy_count;
+      const topicEntries = entries.filter((entry) => entry.topic_id === record.topic_id);
+      const latestScore = topicEntries[0]?.evaluation_score || 0;
+      const weaknessScore =
+        record.again_count * 3 + record.hard_count * 2 - record.easy_count + (latestScore > 0 ? Math.max(0, 75 - latestScore) / 10 : 0);
 
       return topic
         ? {
@@ -338,13 +536,13 @@ const buildWeakTopics = (curriculum, records) =>
             title: topic.title,
             themeTitle: topic.themeTitle,
             stage: record.stage,
-            weaknessScore,
+            weaknessScore: Math.round(weaknessScore),
             againCount: record.again_count,
             hardCount: record.hard_count,
             recommendation:
               record.again_count > 0
-                ? `Reset to learn mode and revisit the definition plus one fresh example for ${topic.title}.`
-                : `Stay in ${record.stage} a little longer and do one more recognition pass for ${topic.title}.`,
+                ? `Revisit the concept guide for ${topic.title} and write one clearer example before moving on.`
+                : `Stay with ${topic.title} a little longer and push for more vivid detail.`,
           }
         : null;
     })
@@ -373,10 +571,65 @@ const buildStageBreakdown = (curriculum, progressByTopicId) => {
   return counters;
 };
 
-const buildSkillBuilderInsights = (curriculum, entries) => {
+const getTopicMastery = (record, topicEntries) => {
+  if (!record && topicEntries.length === 0) return 0;
+
+  const stageWeights = {
+    learn: 30,
+    recognize: 55,
+    apply: 75,
+    mastered: 100,
+  };
+  const stageScore = record ? stageWeights[record.stage] || 0 : 0;
+  const avgScore =
+    topicEntries.length > 0
+      ? topicEntries.reduce((sum, entry) => sum + entry.evaluation_score, 0) / topicEntries.length
+      : 0;
+  const attemptsBoost = Math.min(topicEntries.length * 6, 20);
+
+  return clampScore(stageScore * 0.6 + avgScore * 0.25 + attemptsBoost);
+};
+
+const getTrendDirection = (scores) => {
+  if (scores.length < 2) return "steady";
+  const firstHalf = scores.slice(Math.floor(scores.length / 2));
+  const secondHalf = scores.slice(0, Math.floor(scores.length / 2));
+  const recentAverage =
+    firstHalf.reduce((sum, score) => sum + score, 0) / Math.max(firstHalf.length, 1);
+  const olderAverage =
+    secondHalf.reduce((sum, score) => sum + score, 0) / Math.max(secondHalf.length, 1);
+
+  if (recentAverage - olderAverage >= 6) return "improving";
+  if (olderAverage - recentAverage >= 6) return "declining";
+  return "steady";
+};
+
+const buildLearningPath = (curriculum, progressByTopicId, entries) =>
+  curriculum.map((topic) => {
+    const record = progressByTopicId.get(topic.id) || null;
+    const topicEntries = entries.filter((entry) => entry.topic_id === topic.id);
+    const mastery = getTopicMastery(record, topicEntries);
+
+    return {
+      topicId: topic.id,
+      title: topic.title,
+      themeTitle: topic.themeTitle,
+      stage: record?.stage || "unseen",
+      completed: record?.stage === "mastered",
+      status:
+        record?.stage === "mastered"
+          ? "completed"
+          : record
+            ? "current"
+            : "upcoming",
+      mastery,
+    };
+  });
+
+const buildSkillBuilderInsights = (curriculum, records, entries) => {
   const entriesByTopicId = new Map();
-  const heatmap = Array.from({ length: 35 }, (_, index) => {
-    const dateKey = addDays(toDateKey(), -(35 - index - 1));
+  const heatmap = Array.from({ length: WINDOW_DAYS }, (_, index) => {
+    const dateKey = addDays(toDateKey(), -(WINDOW_DAYS - index - 1));
     const count = entries.filter((entry) => toSafeDateKey(entry.created_at) === dateKey).length;
 
     return {
@@ -395,6 +648,7 @@ const buildSkillBuilderInsights = (curriculum, entries) => {
   const topicStats = Array.from(entriesByTopicId.entries())
     .map(([topicId, topicEntries]) => {
       const topic = curriculum.find((item) => item.id === topicId);
+      const record = records.find((item) => item.topic_id === topicId) || null;
       const avgScore =
         topicEntries.length > 0
           ? Math.round(
@@ -402,6 +656,7 @@ const buildSkillBuilderInsights = (curriculum, entries) => {
                 topicEntries.length,
             )
           : 0;
+      const recentScores = topicEntries.slice(0, 5).map((entry) => entry.evaluation_score);
 
       return topic
         ? {
@@ -410,17 +665,33 @@ const buildSkillBuilderInsights = (curriculum, entries) => {
             themeTitle: topic.themeTitle,
             attempts: topicEntries.length,
             avgScore,
+            latestScore: topicEntries[0]?.evaluation_score || 0,
+            mastery: getTopicMastery(record, topicEntries),
+            trend: getTrendDirection(recentScores),
           }
         : null;
     })
     .filter(Boolean)
     .sort((left, right) => left.title.localeCompare(right.title));
+
   const avgScore =
     entries.length > 0
-      ? Math.round(
-          entries.reduce((sum, entry) => sum + entry.evaluation_score, 0) / entries.length,
-        )
+      ? Math.round(entries.reduce((sum, entry) => sum + entry.evaluation_score, 0) / entries.length)
       : 0;
+  const recentAttempts = entries.slice(0, 5).map((entry) => {
+    const topic = curriculum.find((item) => item.id === entry.topic_id);
+    return {
+      id: entry.id,
+      topicId: entry.topic_id,
+      title: topic?.title || "Writing topic",
+      content: entry.content,
+      feedback: entry.feedback,
+      score: entry.evaluation_score,
+      createdAt: entry.created_at,
+      tags: entry.tags,
+      breakdown: entry.breakdown,
+    };
+  });
 
   return {
     entriesCount: entries.length,
@@ -433,18 +704,19 @@ const buildSkillBuilderInsights = (curriculum, entries) => {
       .filter((topic) => topic.avgScore < WEAK_SCORE_THRESHOLD)
       .map((topic) => ({
         ...topic,
-        recommendation: `Practice ${topic.title.toLowerCase()} with one clearer example.`,
+        recommendation: `Practice ${topic.title.toLowerCase()} with a clearer image and more context.`,
       })),
+    recentAttempts,
+    trend: getTrendDirection(entries.slice(0, 6).map((entry) => entry.evaluation_score)),
   };
 };
 
-const buildActivityHeatmap = (records, entries = [], windowDays = 28) =>
+const buildActivityHeatmap = (records, entries = [], windowDays = WINDOW_DAYS) =>
   Array.from({ length: windowDays }, (_, index) => {
     const dateKey = addDays(toDateKey(), -(windowDays - index - 1));
     const reviewCount = records.reduce(
       (total, record) =>
-        total +
-        record.review_history.filter((entry) => entry.date === dateKey).length,
+        total + record.review_history.filter((entry) => entry.date === dateKey).length,
       0,
     );
     const entryCount = entries.filter((entry) => toSafeDateKey(entry.created_at) === dateKey).length;
@@ -460,10 +732,11 @@ const buildActivityHeatmap = (records, entries = [], windowDays = 28) =>
 const buildProgressSummary = (curriculum, records, entries = []) => {
   const progressByTopicId = new Map(records.map((record) => [record.topic_id, record]));
   const stageBreakdown = buildStageBreakdown(curriculum, progressByTopicId);
-  const streak = getLearningStreak(records);
+  const streak = getLearningStreak(records, entries);
   const themes = buildThemeSummary(curriculum, progressByTopicId);
-  const activeTheme =
-    themes.find((theme) => theme.status !== "completed") || themes[0] || null;
+  const activeTheme = themes.find((theme) => theme.status !== "completed") || themes[0] || null;
+  const learningPath = buildLearningPath(curriculum, progressByTopicId, entries);
+  const skillBuilderInsights = buildSkillBuilderInsights(curriculum, records, entries);
 
   return {
     totalTopics: curriculum.length,
@@ -471,12 +744,13 @@ const buildProgressSummary = (curriculum, records, entries = []) => {
     topicsCompleted: records.filter((record) => record.stage === "mastered").length,
     dueToday: records.filter((record) => record.next_review <= toDateKey()).length,
     streak,
-    weakTopics: buildWeakTopics(curriculum, records),
+    weakTopics: buildWeakTopics(curriculum, records, entries),
     stageBreakdown,
     themes,
     activeTheme,
     heatmap: buildActivityHeatmap(records, entries),
-    skillBuilderInsights: buildSkillBuilderInsights(curriculum, entries),
+    learningPath,
+    skillBuilderInsights,
   };
 };
 
@@ -495,8 +769,7 @@ const buildTodayPayload = (curriculum, records) => {
         left.record.next_review.localeCompare(right.record.next_review) ||
         left.topic.order - right.topic.order,
     );
-  const unlockedNewTopic =
-    curriculum.find((topic) => !progressByTopicId.has(topic.id)) || null;
+  const unlockedNewTopic = curriculum.find((topic) => !progressByTopicId.has(topic.id)) || null;
   const reviewEntries = dueTopics.slice(0, 2).map(({ topic, record }) => ({
     topicId: topic.id,
     title: topic.title,
@@ -574,11 +847,7 @@ export const getLearningProgress = async (userId) => {
   return buildProgressSummary(curriculum, records, entries);
 };
 
-export const submitLearningReview = async ({
-  userId,
-  topicId,
-  performance,
-}) => {
+export const submitLearningReview = async ({ userId, topicId, performance }) => {
   const normalizedPerformance = normalizePerformance(performance);
   const curriculum = await readCurriculum();
   const topic = curriculum.find((item) => item.id === topicId);
@@ -590,8 +859,7 @@ export const submitLearningReview = async ({
   }
 
   const records = await readUserProgress(userId);
-  const existingRecord =
-    records.find((record) => record.topic_id === topicId) || null;
+  const existingRecord = records.find((record) => record.topic_id === topicId) || null;
   const todayKey = toDateKey();
   const nextEaseFactor = getNextEaseFactor(
     existingRecord?.ease_factor || DEFAULT_EASE_FACTOR,
@@ -660,11 +928,7 @@ export const submitLearningReview = async ({
   };
 };
 
-export const submitSkillBuilderWriting = async ({
-  userId,
-  topicId,
-  content,
-}) => {
+export const submitSkillBuilderWriting = async ({ userId, topicId, content }) => {
   const trimmedContent = String(content || "").trim();
   const curriculum = await readCurriculum();
   const topic = curriculum.find((item) => item.id === topicId);
@@ -700,6 +964,9 @@ export const submitSkillBuilderWriting = async ({
       evaluation_score: evaluation.score,
       tags: evaluation.tags,
       feedback: evaluation.feedback,
+      breakdown: evaluation.breakdown,
+      weak_parts: evaluation.weakParts,
+      metrics: evaluation.metrics,
     },
     existingEntries.length,
   );

@@ -41,11 +41,11 @@ const buildRecognizeStage = (topic, curriculum) => {
 const buildApplyStage = (topic) => ({
   type: "write",
   stage: "apply",
-  prompt: `Write one original sentence that clearly uses ${topic.title}.`,
+  prompt: `Write 2-3 original sentences that clearly use ${topic.title}.`,
   guidance:
     topic.examples.length > 0
-      ? `Anchor yourself with the pattern from examples like: ${topic.examples[0]}`
-      : `Focus on showing the effect of ${topic.title} in context.`,
+      ? `Anchor yourself with the pattern from examples like: ${topic.examples[0]}. Add enough context for the image to feel vivid.`
+      : `Focus on showing the effect of ${topic.title} in context across 2-3 connected sentences.`,
 });
 
 export const createStagePayload = ({ topic, stage, curriculum }) => {

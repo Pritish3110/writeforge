@@ -20,11 +20,13 @@ import {
 } from "recharts";
 import {
   Activity,
+  BrainCircuit,
   Clock3,
   Flame,
   MessageSquareQuote,
   ScanText,
   Sparkles,
+  Target,
   TrendingUp,
 } from "lucide-react";
 
@@ -89,6 +91,9 @@ const WritingAnalytics = () => {
     };
   });
   const maxWordCloudCount = analytics.topWords[0]?.count || 0;
+  const strongestSkill = [...(skillInsights?.topicsPracticed || [])]
+    .sort((left, right) => right.mastery - left.mastery)[0] || null;
+  const weakestSkill = skillInsights?.weakAreas?.[0] || null;
 
   if (sessionsCompleted === 0) {
     return (
@@ -412,6 +417,50 @@ const WritingAnalytics = () => {
             </Card>
           </div>
 
+          <div className="grid grid-cols-1 gap-4 lg:grid-cols-3">
+            <Card className="glow-card glow-border">
+              <CardHeader className="pb-2">
+                <CardTitle className="text-sm font-mono text-muted-foreground flex items-center gap-2">
+                  <BrainCircuit className="h-4 w-4 text-neon-cyan" /> Skill Builder Avg
+                </CardTitle>
+              </CardHeader>
+              <CardContent>
+                <p className="text-4xl font-bold font-mono text-neon-cyan">
+                  {skillInsights?.avgScore || 0}
+                </p>
+                <p className="text-xs text-muted-foreground">average guided-practice score</p>
+              </CardContent>
+            </Card>
+
+            <Card className="glow-card glow-border">
+              <CardHeader className="pb-2">
+                <CardTitle className="text-sm font-mono text-muted-foreground flex items-center gap-2">
+                  <TrendingUp className="h-4 w-4 text-neon-pink" /> Strongest Growth
+                </CardTitle>
+              </CardHeader>
+              <CardContent>
+                <p className="text-xl font-semibold">{strongestSkill?.title || "Still building"}</p>
+                <p className="mt-2 text-xs text-muted-foreground">
+                  {strongestSkill ? `${strongestSkill.mastery}% mastery` : "Your strongest concept will show up here."}
+                </p>
+              </CardContent>
+            </Card>
+
+            <Card className="glow-card glow-border">
+              <CardHeader className="pb-2">
+                <CardTitle className="text-sm font-mono text-muted-foreground flex items-center gap-2">
+                  <Target className="h-4 w-4 text-neon-purple" /> Weak Area
+                </CardTitle>
+              </CardHeader>
+              <CardContent>
+                <p className="text-xl font-semibold">{weakestSkill?.title || "No weak areas yet"}</p>
+                <p className="mt-2 text-xs text-muted-foreground">
+                  {weakestSkill?.recommendation || "Keep practicing to surface your next focus area."}
+                </p>
+              </CardContent>
+            </Card>
+          </div>
+
           <Card className="glow-card glow-border">
             <CardHeader>
               <CardTitle className="text-sm font-mono text-muted-foreground">
@@ -446,6 +495,69 @@ const WritingAnalytics = () => {
               </div>
             </CardContent>
           </Card>
+
+          <div className="grid gap-4 lg:grid-cols-[1fr_0.9fr]">
+            <Card className="glow-card glow-border">
+              <CardHeader>
+                <CardTitle className="text-sm font-mono text-muted-foreground">
+                  Recent Skill Builder Attempts
+                </CardTitle>
+              </CardHeader>
+              <CardContent className="space-y-3">
+                {skillInsights?.recentAttempts?.length ? (
+                  skillInsights.recentAttempts.slice(0, 5).map((attempt) => (
+                    <div
+                      key={attempt.id}
+                      className="rounded-lg border border-border bg-muted/20 px-3 py-3"
+                    >
+                      <div className="flex items-start justify-between gap-3">
+                        <div>
+                          <p className="text-sm font-medium">{attempt.title}</p>
+                          <p className="mt-1 text-sm text-muted-foreground">{attempt.content}</p>
+                        </div>
+                        <span className="font-mono text-sm">{attempt.score}</span>
+                      </div>
+                    </div>
+                  ))
+                ) : (
+                  <p className="text-sm text-muted-foreground">
+                    Guided practice attempts will show up here once you start using Skill Builder.
+                  </p>
+                )}
+              </CardContent>
+            </Card>
+
+            <Card className="glow-card glow-border">
+              <CardHeader>
+                <CardTitle className="text-sm font-mono text-muted-foreground">
+                  Focus Topics
+                </CardTitle>
+              </CardHeader>
+              <CardContent className="space-y-3">
+                {(skillInsights?.weakAreas || []).slice(0, 4).map((topic) => (
+                  <div
+                    key={topic.topicId}
+                    className="rounded-lg border border-border bg-muted/20 px-3 py-3"
+                  >
+                    <div className="flex items-center justify-between gap-3">
+                      <p className="text-sm font-medium">{topic.title}</p>
+                      <Badge variant="outline" className="font-mono text-[11px]">
+                        {topic.avgScore}/100
+                      </Badge>
+                    </div>
+                    <p className="mt-2 text-xs text-muted-foreground">
+                      {topic.recommendation}
+                    </p>
+                  </div>
+                ))}
+                {!(skillInsights?.weakAreas || []).length ? (
+                  <p className="text-sm text-muted-foreground">
+                    No weak-area pattern yet. Keep stacking attempts and this section will sharpen.
+                  </p>
+                ) : null}
+              </CardContent>
+            </Card>
+          </div>
         </TabsContent>
       </Tabs>
     </div>
