@@ -729,3 +729,22 @@ export const submitSkillBuilderChallenge = async ({
     }).evaluation,
   };
 };
+
+export const resetSkillBuilderAttempts = async (
+  topicId: string,
+): Promise<LearningSessionResponse> => {
+  const response = await fetch(buildApiUrl("/api/learning/reset"), {
+    method: "DELETE",
+    headers: await createLearningHeaders(),
+    body: JSON.stringify({
+      topicId,
+    }),
+  });
+
+  const payload = await readJson<LearningSessionResponse>(response);
+
+  return {
+    ...payload,
+    session: normalizeSession(payload.session),
+  };
+};

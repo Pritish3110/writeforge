@@ -156,6 +156,18 @@ const addSubjectIfMissing = (sentence: string) => {
   return `He ${sentence.charAt(0).toLowerCase()}${sentence.slice(1)}`;
 };
 
+const fixBrokenSentenceStart = (sentence: string) => {
+  // Fix patterns like "He in the heart" -> "In the heart"
+  if (/^(He|She|It)\s+in\b/i.test(sentence)) {
+    return sentence.replace(/^(He|She|It)\s+/i, "");
+  }
+  // Fix patterns like "He strong as" -> "He stood strong as"
+  if (/^(He|She|They)\s+(strong|weak|brave|fierce)/i.test(sentence)) {
+    return sentence.replace(/^(He|She|They)\s+/i, "$1 stood ");
+  }
+  return sentence;
+};
+
 const enhanceSimile = (content: string) => {
   const trimmed = content.trim();
   if (!trimmed) return "";
@@ -164,20 +176,34 @@ const enhanceSimile = (content: string) => {
     .split(/(?<=[.!?])\s+/)
     .map((sentence) => sentence.trim())
     .filter(Boolean);
-  let firstSentence = addSubjectIfMissing(sentences[0] || trimmed);
+  
+  let firstSentence = sentences[0] || trimmed;
+  
+  // Fix broken sentence structures first
+  firstSentence = fixBrokenSentenceStart(firstSentence);
+  
+  // Ensure valid subject if sentence doesn't start with a known pattern
+  if (!/^(He|She|They|It|The|A|An|In|With)/i.test(firstSentence)) {
+    firstSentence = `In the arena, a figure stood ${firstSentence.charAt(0).toLowerCase()}${firstSentence.slice(1)}`;
+  }
 
+  // Enhance weak comparisons
   firstSentence = firstSentence
     .replace(/\bbull\b/i, "raging bull")
     .replace(/\blion\b/i, "battle-ready lion")
-    .replace(/\bwind\b/i, "winter wind");
+    .replace(/\bwind\b/i, "winter wind")
+    .replace(/\bstone\b/i, "unyielding stone")
+    .replace(/\brock\b/i, "unshakable rock");
 
-  if (!/\bin\b/i.test(firstSentence)) {
+  // Add context if missing spatial reference
+  if (!/\b(in|on|at|inside|outside|through|across)\b/i.test(firstSentence)) {
     firstSentence += " in the arena";
   }
 
+  // Add second sentence if missing
   const secondSentence =
     sentences[1] ||
-    "The moment stayed tense, and everyone around him could feel that strength.";
+    "The moment held weight, and everyone around could feel that unbreakable strength.";
 
   return `${ensureSentenceEnding(firstSentence)} ${ensureSentenceEnding(secondSentence)}`;
 };
@@ -190,12 +216,34 @@ const enhanceWithContext = (content: string, topic: LearningTopic) => {
     .split(/(?<=[.!?])\s+/)
     .map((sentence) => sentence.trim())
     .filter(Boolean);
-  const firstSentence = ensureSentenceEnding(addSubjectIfMissing(sentences[0] || trimmed));
+  
+  let firstSentence = sentences[0] || trimmed;
+  
+  // Fix broken sentence structures first
+  firstSentence = fixBrokenSentenceStart(firstSentence);
+  
+  // Ensure valid subject
+  if (!/^(He|She|They|It|The|A|An|In|With)/i.test(firstSentence)) {
+    firstSentence = `The ${firstSentence.charAt(0).toLowerCase()}${firstSentence.slice(1)}`;
+  }
+
+  // Enhance weak adjectives and nouns
+  firstSentence = firstSentence
+    .replace(/\bvery\s+(good|bad|strong|weak)/gi, "impactful")
+    .replace(/\bsimple\b/gi, "straightforward")
+    .replace(/\bbeautiful\b/gi, "striking")
+    .replace(/\bterrible\b/gi, "harrowing");
+
+  // Add context if missing spatial or emotional reference
+  if (!/\b(in|on|at|inside|through|across|from|within)\b/i.test(firstSentence)) {
+    firstSentence += " in the scene";
+  }
+
   const secondSentence =
     sentences[1] ||
-    `The ${topic.title.toLowerCase()} lands better when the scene includes a setting and one stronger detail.`;
+    `The ${topic.title.toLowerCase()} lands better when the scene includes a setting and one stronger descriptive detail.`;
 
-  return `${firstSentence} ${ensureSentenceEnding(secondSentence)}`;
+  return `${ensureSentenceEnding(firstSentence)} ${ensureSentenceEnding(secondSentence)}`;
 };
 
 export const buildRuleBasedImprovement = (content: string, topic: LearningTopic) => {

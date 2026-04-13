@@ -162,6 +162,9 @@ const SkillBuilder = () => {
   const [sessionError, setSessionError] = useState<string | null>(null);
   const [persistingStep, setPersistingStep] = useState<LearningSessionStep | null>(null);
   const [challengeResponse, setChallengeResponse] = useState("");
+  const [showResetModal, setShowResetModal] = useState(false);
+  const [resetConfirmInput, setResetConfirmInput] = useState("");
+  const [isResetting, setIsResetting] = useState(false);
   const currentItem = useMemo(
     () => today?.application || today?.new || today?.reviews?.[0] || null,
     [today],
@@ -291,7 +294,9 @@ const SkillBuilder = () => {
       setResult(payload);
       setSession(payload.session || null);
       setChallengeResult(null);
-      setActiveStep("improve");
+      
+      // Persist the write step to backend
+      await persistStep("write", "improve");
     }
   };
 
@@ -312,6 +317,7 @@ const SkillBuilder = () => {
       setResult(null);
     }
 
+    // Persist the improve step to backend
     await persistStep("improve", "challenge");
   };
 
@@ -340,9 +346,53 @@ const SkillBuilder = () => {
 
       setChallengeResult(payload);
       setSession(payload.session);
+      
+      // Persist the challenge step to backend
+      await persistStep("challenge");
       await refreshToday();
     } catch {
       setSessionError("Challenge scoring could not be saved.");
+    }
+  };
+
+  const handleResetAttempts = async () => {
+    if (resetConfirmInput !== "DELETE") {
+      setSessionError("Incorrect confirmation. Type DELETE to confirm.");
+      return;
+    }
+
+    setIsResetting(true);
+    setSessionError(null);
+
+    try {
+      const response = await fetch(buildApiUrl("/api/learning/reset"), {
+        method: "DELETE",
+        headers: await createLearningHeaders(),
+        body: JSON.stringify({ topicId: topic?.id }),
+      });
+
+      if (!response.ok) {
+        throw new Error("Reset failed");
+      }
+
+      // Clear local state
+      setContent("");
+      setResult(null);
+      setChallengeResult(null);
+      setCoachDraft("");
+      setChallengeResponse("");
+      setSession(null);
+      setShowResetModal(false);
+      setResetConfirmInput("");
+
+      // Refresh data from backend
+      await refreshToday();
+
+      setSessionError("✓ All attempts cleared. Your progress has been reset.");
+    } catch {
+      setSessionError("Could not reset attempts. Please try again.");
+    } finally {
+      setIsResetting(false);
     }
   };
 
