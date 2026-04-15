@@ -7,7 +7,7 @@ import { ArrowRight, BrainCircuit } from "lucide-react";
 
 const DailyLearningCard = () => {
   const navigate = useNavigate();
-  const { today } = useLearningEngine();
+  const { today } = useLearningEngine({ loadToday: true, loadProgress: false });
   const currentItem = useMemo(
     () => today?.application || today?.new || today?.reviews?.[0] || null,
     [today],

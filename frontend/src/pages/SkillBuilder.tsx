@@ -195,6 +195,7 @@ const SkillBuilder = () => {
     [today],
   );
   const topic = getTopicFromItem(currentItem);
+  const topicId = topic?.id || "";
   const cycleInfo = cycle || sessionCycle;
   const dateKey = cycleInfo?.currentDate || new Date().toISOString().slice(0, 10);
   const sessionState = session?.steps || emptySessionSteps;
@@ -241,6 +242,7 @@ const SkillBuilder = () => {
   const completedCount = sessionOrder.filter((step) => sessionState[step]).length;
   const sessionProgress = (completedCount / sessionOrder.length) * 100;
   const improvementChecklist = topic ? getImprovementChecklist(topic) : [];
+  const normalizedResetConfirmInput = resetConfirmInput.trim().toLowerCase();
 
   const resetLocalSessionState = useCallback(() => {
     setContent("");
@@ -253,7 +255,7 @@ const SkillBuilder = () => {
 
   const loadSession = useCallback(
     async (showLoader = false) => {
-      if (!topic) {
+      if (!topicId) {
         setSession(null);
         setSessionCycle(null);
         setLoadingSession(false);
@@ -281,16 +283,11 @@ const SkillBuilder = () => {
         }
       }
     },
-    [topic],
+    [topicId],
   );
 
-  const syncLearningState = useCallback(async () => {
-    const [, sessionPayload] = await Promise.all([refreshToday(), loadSession(false)]);
-    return sessionPayload;
-  }, [loadSession, refreshToday]);
-
   useEffect(() => {
-    if (!topic) {
+    if (!topicId) {
       setSession(null);
       setSessionCycle(null);
       setLoadingSession(false);
@@ -312,7 +309,7 @@ const SkillBuilder = () => {
     return () => {
       cancelled = true;
     };
-  }, [loadSession, topic]);
+  }, [loadSession, topicId]);
 
   useEffect(() => {
     resetLocalSessionState();
@@ -352,7 +349,7 @@ const SkillBuilder = () => {
     const refreshForNextCycle = async () => {
       setRefreshingCycle(true);
       setLastCycleRefreshTarget(cycleInfo.nextCycleAt);
-      const payload = await syncLearningState();
+      const payload = await refreshToday();
       if (!cancelled && payload) {
         resetLocalSessionState();
       }
@@ -371,12 +368,12 @@ const SkillBuilder = () => {
     cycleInfo?.nextCycleAt,
     lastCycleRefreshTarget,
     refreshingCycle,
+    refreshToday,
     resetLocalSessionState,
-    syncLearningState,
   ]);
 
   const persistStep = async (step: LearningSessionStep, nextStep?: SessionStep) => {
-    if (!topic || sessionState[step]) {
+    if (!topicId || sessionState[step]) {
       if (nextStep) setActiveStep(nextStep);
       return;
     }
@@ -386,14 +383,14 @@ const SkillBuilder = () => {
 
     try {
       const payload = await updateLearningSession({
-        topicId: topic.id,
+        topicId,
         step,
         completed: true,
       });
       setSession(payload.session);
       setSessionCycle(payload.cycle);
-      await syncLearningState();
       if (nextStep) setActiveStep(nextStep);
+      void refreshToday();
     } catch {
       setSessionError("Could not save this step right now.");
     } finally {
@@ -402,15 +399,15 @@ const SkillBuilder = () => {
   };
 
   const handleSubmit = async () => {
-    if (!topic || !validation.isValid || isWriteLocked) return;
+    if (!topicId || !validation.isValid || isWriteLocked) return;
 
-    const payload = await submitWriting(topic.id, content);
+    const payload = await submitWriting(topicId, content);
     if (payload) {
       setResult(payload);
       setSession(payload.session || null);
       setChallengeResult(null);
-      await syncLearningState();
       setActiveStep("improve");
+      void refreshToday();
     }
   };
 
@@ -442,7 +439,7 @@ const SkillBuilder = () => {
   };
 
   const handleChallengeSubmit = async (answerId?: string) => {
-    if (!topic || !challengeTask || isChallengeLocked) return;
+    if (!topicId || !challengeTask || isChallengeLocked) return;
 
     try {
       let payload: SkillBuilderChallengeResponse;
@@ -450,7 +447,7 @@ const SkillBuilder = () => {
       if (challengeTask.type === "identify") {
         const score = answerId === challengeTask.answerId ? 100 : 40;
         payload = await submitSkillBuilderChallenge({
-          topicId: topic.id,
+          topicId,
           challengeScore: score,
         });
       } else {
@@ -459,22 +456,22 @@ const SkillBuilder = () => {
           return;
         }
         payload = await submitSkillBuilderChallenge({
-          topicId: topic.id,
+          topicId,
           content: challengeResponse,
         });
       }
 
       setChallengeResult(payload);
       setSession(payload.session);
-      await syncLearningState();
+      void refreshToday();
     } catch {
       setSessionError("Challenge scoring could not be saved.");
     }
   };
 
   const handleResetAttempts = async () => {
-    if (resetConfirmInput !== "DELETE") {
-      setSessionError("Incorrect confirmation. Type DELETE to confirm.");
+    if (normalizedResetConfirmInput !== "reset attempts") {
+      setSessionError('Incorrect confirmation. Type "reset attempts" to confirm.');
       return;
     }
 
@@ -492,7 +489,7 @@ const SkillBuilder = () => {
       resetLocalSessionState();
       setShowResetModal(false);
       setResetConfirmInput("");
-      await syncLearningState();
+      await refreshToday();
       setSessionError("✓ All attempts cleared. Your progress has been reset.");
     } catch {
       setSessionError("Could not reset attempts. Please try again.");
@@ -987,10 +984,10 @@ const SkillBuilder = () => {
               <Button
                 type="button"
                 variant="ghost"
-                className="font-mono text-muted-foreground hover:text-destructive"
+                className="font-mono text-destructive hover:text-destructive"
                 onClick={() => setShowResetModal(true)}
               >
-                Reset Attempts
+                Delete Attempts
               </Button>
             </div>
           </CardHeader>
@@ -1105,9 +1102,9 @@ const SkillBuilder = () => {
       <Dialog open={showResetModal} onOpenChange={setShowResetModal}>
         <DialogContent className="glow-border sm:max-w-md">
           <DialogHeader>
-            <DialogTitle className="font-mono text-base">Reset attempts?</DialogTitle>
+            <DialogTitle className="font-mono text-base">Hard reset attempts?</DialogTitle>
             <DialogDescription className="leading-6">
-              Type <span className="font-mono text-foreground">DELETE</span> to clear attempts,
+              Type <span className="font-mono text-foreground">reset attempts</span> to clear attempts,
               session progress, analytics, and mastery data for this topic.
             </DialogDescription>
           </DialogHeader>
@@ -1119,7 +1116,7 @@ const SkillBuilder = () => {
             <Input
               value={resetConfirmInput}
               onChange={(event) => setResetConfirmInput(event.target.value)}
-              placeholder="DELETE"
+              placeholder="reset attempts"
               className="font-mono"
             />
           </div>
@@ -1138,10 +1135,10 @@ const SkillBuilder = () => {
             <Button
               type="button"
               variant="destructive"
-              disabled={resetConfirmInput !== "DELETE" || isResetting}
+              disabled={normalizedResetConfirmInput !== "reset attempts" || isResetting}
               onClick={() => void handleResetAttempts()}
             >
-              {isResetting ? "Resetting..." : "Reset Attempts"}
+              {isResetting ? "Resetting..." : "Hard Reset"}
             </Button>
           </DialogFooter>
         </DialogContent>

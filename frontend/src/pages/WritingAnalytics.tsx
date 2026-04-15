@@ -1,3 +1,4 @@
+import { useMemo } from "react";
 import { Link } from "react-router-dom";
 import { PenMark } from "@/components/brand/PenMark";
 import { useLearningEngine } from "@/hooks/useLearningEngine";
@@ -75,24 +76,34 @@ const WritingAnalytics = () => {
     loadToday: false,
     loadProgress: true,
   });
-  const analytics = analyzeWritingDrafts(drafts);
+  const analytics = useMemo(() => analyzeWritingDrafts(drafts), [drafts]);
   const skillInsights = learningProgress?.skillBuilderInsights;
-  const skillHeatmapCounts = new Map(
-    (skillInsights?.heatmap || []).map((cell) => [cell.date, cell.count]),
+  const skillHeatmapCounts = useMemo(
+    () => new Map((skillInsights?.heatmap || []).map((cell) => [cell.date, cell.count])),
+    [skillInsights?.heatmap],
   );
   const totalWords = analytics.totalWords + (skillInsights?.totalWritingWords || 0);
   const sessionsCompleted = analytics.sessionsCompleted + (skillInsights?.entriesCount || 0);
-  const combinedHeatmap = analytics.heatmap.map((cell) => {
-    const skillSessions = skillHeatmapCounts.get(cell.date) || 0;
-    return {
-      ...cell,
-      sessions: cell.sessions + skillSessions,
-      level: Math.max(cell.level, skillSessions === 0 ? 0 : skillSessions === 1 ? 1 : 2),
-    };
-  });
+  const combinedHeatmap = useMemo(
+    () =>
+      analytics.heatmap.map((cell) => {
+        const skillSessions = skillHeatmapCounts.get(cell.date) || 0;
+        return {
+          ...cell,
+          sessions: cell.sessions + skillSessions,
+          level: Math.max(cell.level, skillSessions === 0 ? 0 : skillSessions === 1 ? 1 : 2),
+        };
+      }),
+    [analytics.heatmap, skillHeatmapCounts],
+  );
   const maxWordCloudCount = analytics.topWords[0]?.count || 0;
-  const strongestSkill = [...(skillInsights?.topicsPracticed || [])]
-    .sort((left, right) => right.mastery - left.mastery)[0] || null;
+  const strongestSkill = useMemo(
+    () =>
+      [...(skillInsights?.topicsPracticed || [])].sort(
+        (left, right) => right.mastery - left.mastery,
+      )[0] || null,
+    [skillInsights?.topicsPracticed],
+  );
   const weakestSkill = skillInsights?.weakAreas?.[0] || null;
 
   if (sessionsCompleted === 0) {
