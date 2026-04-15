@@ -75,6 +75,11 @@ const addDays = (dateKey, days) => {
   return toDateKey(date);
 };
 
+const buildCycleInfo = (dateKey = toDateKey()) => ({
+  currentDate: dateKey,
+  nextCycleAt: `${addDays(dateKey, 1)}T00:00:00.000Z`,
+});
+
 const clampScore = (value) => Math.min(Math.max(Math.round(value), 0), 100);
 
 const normalizePerformance = (value) => {
@@ -483,6 +488,13 @@ const normalizeSessionRecord = (value, fallbackIndex) => {
   };
 };
 
+const hasSessionActivity = (session) =>
+  Boolean(
+    session &&
+      session.steps &&
+      Object.values(session.steps).some((value) => Boolean(value)),
+  );
+
 const readUserProgress = async (userId) => {
   const store = await readLearningProgressStore();
   return store.map(normalizeProgressRecord).filter((record) => record.user_id === userId);
@@ -555,10 +567,18 @@ const createSessionSnapshot = (session, topicId, dateKey = toDateKey()) =>
     0,
   );
 
-const getTodaySessionRecord = (sessions, topicId, dateKey = toDateKey()) =>
-  sessions.find((session) => session.date === dateKey && (!topicId || session.topic_id === topicId)) ||
-  sessions.find((session) => session.date === dateKey) ||
-  null;
+const getSessionForDate = (sessions, dateKey = toDateKey()) =>
+  sessions.find((session) => session.date === dateKey) || null;
+
+const getTodaySessionRecord = (sessions, topicId, dateKey = toDateKey()) => {
+  const sessionForDate = getSessionForDate(sessions, dateKey);
+
+  if (!sessionForDate) return null;
+  if (!topicId) return sessionForDate;
+  if (!sessionForDate.topic_id || sessionForDate.topic_id === topicId) return sessionForDate;
+
+  return null;
+};
 
 const persistSession = async ({ userId, sessions, session }) => {
   const nextSessions = sessions
@@ -769,7 +789,7 @@ const buildSkillBuilderInsights = (curriculum, records, entries, sessions) => {
   const heatmap = Array.from({ length: WINDOW_DAYS }, (_, index) => {
     const dateKey = addDays(toDateKey(), -(WINDOW_DAYS - index - 1));
     const session = sessions.find((item) => item.date === dateKey) || null;
-    const count = session
+    const count = hasSessionActivity(session)
       ? session.completed
         ? 2
         : 1
@@ -894,7 +914,7 @@ const buildActivityHeatmap = (records, entries = [], sessions = [], windowDays =
     );
     const entryCount = entries.filter((entry) => toSafeDateKey(entry.created_at) === dateKey).length;
     const session = sessions.find((item) => item.date === dateKey) || null;
-    const sessionCount = session ? (session.completed ? 2 : 1) : 0;
+    const sessionCount = hasSessionActivity(session) ? (session.completed ? 2 : 1) : 0;
     const count = Math.max(sessionCount, reviewCount + entryCount);
 
     return {
@@ -938,7 +958,7 @@ const buildProgressSummary = (curriculum, records, entries = [], sessions = []) 
   };
 };
 
-const buildTodayPayload = (curriculum, records) => {
+const buildTodayPayload = (curriculum, records, preferredTopicId = null) => {
   const todayKey = toDateKey();
   const progressByTopicId = new Map(records.map((record) => [record.topic_id, record]));
   const dueTopics = records
@@ -966,7 +986,12 @@ const buildTodayPayload = (curriculum, records) => {
       curriculum,
     }),
   }));
+  const preferredTopic =
+    typeof preferredTopicId === "string" && preferredTopicId.trim()
+      ? curriculum.find((topic) => topic.id === preferredTopicId) || null
+      : null;
   const applicationCandidate =
+    preferredTopic ||
     curriculum.find((topic) => {
       if (unlockedNewTopic?.id === topic.id) return false;
       if (reviewEntries.some((entry) => entry.topicId === topic.id)) return false;
@@ -1038,11 +1063,13 @@ export const getLearningToday = async (userId) => {
   const records = await readUserProgress(userId);
   const entries = await readUserSkillBuilderEntries(userId);
   const sessions = await readUserLearningSessions(userId);
-  const todayPayload = buildTodayPayload(curriculum, records);
+  const todaySession = getSessionForDate(sessions);
+  const todayPayload = buildTodayPayload(curriculum, records, todaySession?.topic_id || null);
 
   return {
     today: todayPayload,
     progress: buildProgressSummary(curriculum, records, entries, sessions),
+    cycle: buildCycleInfo(),
   };
 };
 
@@ -1059,12 +1086,14 @@ export const getLearningSessionToday = async (userId) => {
   const curriculum = await readCurriculum();
   const records = await readUserProgress(userId);
   const sessions = await readUserLearningSessions(userId);
-  const todayPayload = buildTodayPayload(curriculum, records);
+  const todaySession = getSessionForDate(sessions);
+  const todayPayload = buildTodayPayload(curriculum, records, todaySession?.topic_id || null);
   const topicId = getTodayTopicId(todayPayload);
   const session = getTodaySessionRecord(sessions, topicId);
 
   return {
     session: buildSessionResponse({ session, topicId }),
+    cycle: buildCycleInfo(),
   };
 };
 
@@ -1076,6 +1105,12 @@ export const updateLearningSession = async ({ userId, topicId, step, completed =
   const sessions = await readUserLearningSessions(userId);
   const existingSession = getTodaySessionRecord(sessions, topicId, dateKey);
   const nextSession = createSessionSnapshot(existingSession, topicId, dateKey);
+
+  if (!Object.prototype.hasOwnProperty.call(nextSession.steps, step)) {
+    const error = new Error("Invalid learning session step.");
+    error.statusCode = 400;
+    throw error;
+  }
 
   if (step && Object.prototype.hasOwnProperty.call(nextSession.steps, step)) {
     nextSession.steps[step] = Boolean(completed);
@@ -1091,6 +1126,7 @@ export const updateLearningSession = async ({ userId, topicId, step, completed =
   return {
     session: buildSessionResponse({ session: nextSession, topicId, dateKey }),
     progress: buildProgressSummary(curriculum, records, entries, nextSessions),
+    cycle: buildCycleInfo(dateKey),
   };
 };
 
@@ -1341,5 +1377,28 @@ export const submitSkillBuilderChallenge = async ({
     finalScore,
     progress: buildProgressSummary(curriculum, records, existingEntries, nextSessions),
     session: buildSessionResponse({ session: nextSession, topicId }),
+  };
+};
+
+export const resetSkillBuilderProgress = async ({ userId, topicId }) => {
+  const curriculum = await readCurriculum();
+  const records = await readUserProgress(userId);
+  const entries = await readUserSkillBuilderEntries(userId);
+  const sessions = await readUserLearningSessions(userId);
+  const nextRecords = records.filter((record) => record.topic_id !== topicId);
+  const nextEntries = entries.filter((entry) => entry.topic_id !== topicId);
+  const nextSessions = sessions.filter((session) => session.topic_id !== topicId);
+  const todayPayload = buildTodayPayload(curriculum, nextRecords, getSessionForDate(nextSessions)?.topic_id || null);
+  const nextTopicId = getTodayTopicId(todayPayload);
+  const nextSession = getTodaySessionRecord(nextSessions, nextTopicId);
+
+  await writeUserProgress(userId, nextRecords);
+  await writeUserSkillBuilderEntries(userId, nextEntries);
+  await writeUserLearningSessions(userId, nextSessions);
+
+  return {
+    session: buildSessionResponse({ session: nextSession, topicId: nextTopicId }),
+    progress: buildProgressSummary(curriculum, nextRecords, nextEntries, nextSessions),
+    cycle: buildCycleInfo(),
   };
 };

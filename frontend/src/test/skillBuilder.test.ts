@@ -61,4 +61,22 @@ describe("skillBuilder helpers", () => {
     expect(rewrite).toContain("arena");
     expect(checklist).toHaveLength(3);
   });
+
+  it("adds a subject and context when the draft starts abruptly", () => {
+    const rewrite = buildRuleBasedImprovement("Strong as a bull.", simileTopic);
+
+    expect(rewrite).toContain("The figure");
+    expect(rewrite).toContain("raging bull");
+    expect(rewrite).toContain("arena");
+  });
+
+  it("repairs broken opening grammar without changing the scene intent", () => {
+    const rewrite = buildRuleBasedImprovement(
+      "He in the heart of battle stood like stone.",
+      simileTopic,
+    );
+
+    expect(rewrite).toContain("In the heart of battle");
+    expect(rewrite).toContain("unyielding stone");
+  });
 });

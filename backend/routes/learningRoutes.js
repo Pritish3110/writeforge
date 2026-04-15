@@ -1,6 +1,7 @@
 import { Router } from "express";
 import {
   getLearningProgressSummary,
+  resetLearningProgress,
   getTodaySession,
   getTodayLearning,
   submitChallenge,
@@ -18,5 +19,6 @@ learningRoutes.post("/session/update", updateSession);
 learningRoutes.post("/submit", submitLearning);
 learningRoutes.post("/submit-writing", submitWriting);
 learningRoutes.post("/submit-challenge", submitChallenge);
+learningRoutes.delete("/reset", resetLearningProgress);
 
 export { learningRoutes };

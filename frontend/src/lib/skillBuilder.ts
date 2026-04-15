@@ -22,6 +22,8 @@ export interface SkillBuilderChallengeTask {
 }
 
 const ensureSentenceEnding = (value: string) => (/[.!?]$/.test(value) ? value : `${value}.`);
+const ensureSentenceCase = (value: string) =>
+  value ? `${value.charAt(0).toUpperCase()}${value.slice(1)}` : value;
 
 const MIN_SENTENCES = 2;
 const MAX_SENTENCES = 3;
@@ -151,107 +153,111 @@ export const buildCoachFallback = (content: string, topic: LearningTopic) => {
   return `${firstSentence.replace(/\s+$/, "")} ${secondSentence} The comparison now feels more grounded and vivid.`;
 };
 
-const addSubjectIfMissing = (sentence: string) => {
-  if (/^(he|she|they|it|the|a|an)\b/i.test(sentence)) return sentence;
-  return `He ${sentence.charAt(0).toLowerCase()}${sentence.slice(1)}`;
-};
+const COMPARISON_UPGRADES: Array<[RegExp, string]> = [
+  [/\bbull\b/gi, "raging bull"],
+  [/\bstone\b/gi, "unyielding stone"],
+  [/\bwind\b/gi, "roaring wind"],
+];
 
-const fixBrokenSentenceStart = (sentence: string) => {
-  // Fix patterns like "He in the heart" -> "In the heart"
-  if (/^(He|She|It)\s+in\b/i.test(sentence)) {
-    return sentence.replace(/^(He|She|It)\s+/i, "");
-  }
-  // Fix patterns like "He strong as" -> "He stood strong as"
-  if (/^(He|She|They)\s+(strong|weak|brave|fierce)/i.test(sentence)) {
-    return sentence.replace(/^(He|She|They)\s+/i, "$1 stood ");
-  }
-  return sentence;
-};
-
-const enhanceSimile = (content: string) => {
-  const trimmed = content.trim();
-  if (!trimmed) return "";
-
-  const sentences = trimmed
+const splitSentences = (content: string) =>
+  content
+    .trim()
     .split(/(?<=[.!?])\s+/)
     .map((sentence) => sentence.trim())
     .filter(Boolean);
-  
-  let firstSentence = sentences[0] || trimmed;
-  
-  // Fix broken sentence structures first
-  firstSentence = fixBrokenSentenceStart(firstSentence);
-  
-  // Ensure valid subject if sentence doesn't start with a known pattern
-  if (!/^(He|She|They|It|The|A|An|In|With)/i.test(firstSentence)) {
-    firstSentence = `In the arena, a figure stood ${firstSentence.charAt(0).toLowerCase()}${firstSentence.slice(1)}`;
-  }
 
-  // Enhance weak comparisons
-  firstSentence = firstSentence
-    .replace(/\bbull\b/i, "raging bull")
-    .replace(/\blion\b/i, "battle-ready lion")
-    .replace(/\bwind\b/i, "winter wind")
-    .replace(/\bstone\b/i, "unyielding stone")
-    .replace(/\brock\b/i, "unshakable rock");
+const normalizeSpacing = (sentence: string) => sentence.replace(/\s+/g, " ").trim();
 
-  // Add context if missing spatial reference
-  if (!/\b(in|on|at|inside|outside|through|across)\b/i.test(firstSentence)) {
-    firstSentence += " in the arena";
-  }
+const fixBrokenGrammar = (sentence: string) => {
+  let nextSentence = normalizeSpacing(sentence);
 
-  // Add second sentence if missing
-  const secondSentence =
-    sentences[1] ||
-    "The moment held weight, and everyone around could feel that unbreakable strength.";
+  nextSentence = nextSentence.replace(
+    /^(He|She|They|It)\s+(in|inside|within|at|under|on|through|across)\b/i,
+    (_, __, preposition: string) => ensureSentenceCase(preposition.toLowerCase()),
+  );
+  nextSentence = nextSentence.replace(/\b(he|she|they|it)\s+in\s+the\b/i, "in the");
+  nextSentence = nextSentence.replace(/^(He|She|They)\s+(strong|weak|brave|fierce)\b/i, "$1 stood $2");
 
-  return `${ensureSentenceEnding(firstSentence)} ${ensureSentenceEnding(secondSentence)}`;
+  return normalizeSpacing(nextSentence);
 };
 
-const enhanceWithContext = (content: string, topic: LearningTopic) => {
-  const trimmed = content.trim();
-  if (!trimmed) return "";
+const startsWithSubject = (sentence: string) =>
+  /^(he|she|they|it|the|a|an|this|that|these|those|my|our|his|her|their)\b/i.test(sentence);
 
-  const sentences = trimmed
-    .split(/(?<=[.!?])\s+/)
-    .map((sentence) => sentence.trim())
-    .filter(Boolean);
-  
-  let firstSentence = sentences[0] || trimmed;
-  
-  // Fix broken sentence structures first
-  firstSentence = fixBrokenSentenceStart(firstSentence);
-  
-  // Ensure valid subject
-  if (!/^(He|She|They|It|The|A|An|In|With)/i.test(firstSentence)) {
-    firstSentence = `The ${firstSentence.charAt(0).toLowerCase()}${firstSentence.slice(1)}`;
+const startsWithIntroPhrase = (sentence: string) =>
+  /^(in|inside|within|at|under|on|near|through|across|beyond|during|after|before|while|when)\b/i.test(
+    sentence,
+  );
+
+const ensureSubjectExists = (sentence: string) => {
+  if (startsWithSubject(sentence) || startsWithIntroPhrase(sentence)) {
+    return sentence;
   }
 
-  // Enhance weak adjectives and nouns
-  firstSentence = firstSentence
-    .replace(/\bvery\s+(good|bad|strong|weak)/gi, "impactful")
-    .replace(/\bsimple\b/gi, "straightforward")
-    .replace(/\bbeautiful\b/gi, "striking")
-    .replace(/\bterrible\b/gi, "harrowing");
-
-  // Add context if missing spatial or emotional reference
-  if (!/\b(in|on|at|inside|through|across|from|within)\b/i.test(firstSentence)) {
-    firstSentence += " in the scene";
+  if (/\b(as|like)\b/i.test(sentence) || /^(strong|brave|fierce|steady|silent|wild)\b/i.test(sentence)) {
+    return `The figure was ${sentence.charAt(0).toLowerCase()}${sentence.slice(1)}`;
   }
 
-  const secondSentence =
-    sentences[1] ||
-    `The ${topic.title.toLowerCase()} lands better when the scene includes a setting and one stronger descriptive detail.`;
+  return `The figure ${sentence.charAt(0).toLowerCase()}${sentence.slice(1)}`;
+};
 
-  return `${ensureSentenceEnding(firstSentence)} ${ensureSentenceEnding(secondSentence)}`;
+const strengthenComparisons = (sentence: string) =>
+  COMPARISON_UPGRADES.reduce(
+    (nextSentence, [pattern, replacement]) => nextSentence.replace(pattern, replacement),
+    sentence,
+  );
+
+const hasLocationContext = (sentence: string) =>
+  /\b(arena|battlefield|storm|forest|street|room|river|shore|sky|sea|crowd|city|hall|field|desert|castle|mountain)\b/i.test(
+    sentence,
+  );
+
+const chooseLocationContext = (content: string) => {
+  if (/\b(battle|war|sword|shield|soldier)\b/i.test(content)) return "on the battlefield";
+  if (/\b(storm|thunder|rain|lightning|wind)\b/i.test(content)) return "inside the storm";
+  if (/\b(crowd|cheer|fighter|bull|strength|roar)\b/i.test(content)) return "in the arena";
+
+  return "in the scene";
+};
+
+const appendContextIfMissing = (sentence: string, fullContent: string) =>
+  hasLocationContext(sentence) ? sentence : `${sentence} ${chooseLocationContext(fullContent)}`;
+
+const buildSupportSentence = (topic: LearningTopic, baseSentence: string) => {
+  if (/\b(battle|war|sword|shield)\b/i.test(baseSentence)) {
+    return "The image keeps the same fierce meaning while making the scene easier to picture.";
+  }
+
+  if (topic.id === "simile") {
+    return "The comparison now feels more vivid without changing the original meaning.";
+  }
+
+  return `The ${topic.title.toLowerCase()} now feels clearer, stronger, and easier to picture.`;
+};
+
+const rewritePrimarySentence = (sentence: string, topic: LearningTopic, fullContent: string) => {
+  let nextSentence = fixBrokenGrammar(sentence);
+  nextSentence = ensureSubjectExists(nextSentence);
+  nextSentence = strengthenComparisons(nextSentence);
+  nextSentence = appendContextIfMissing(nextSentence, fullContent);
+
+  if (topic.id === "simile" && /\bas\s+\w+\s+as\b/i.test(nextSentence) && !/\bwas\b/i.test(nextSentence)) {
+    nextSentence = nextSentence.replace(/\bstood as\b/i, "was as");
+  }
+
+  return ensureSentenceEnding(ensureSentenceCase(normalizeSpacing(nextSentence)));
 };
 
 export const buildRuleBasedImprovement = (content: string, topic: LearningTopic) => {
-  if (topic.id === "simile" && /\b(as|like)\b/i.test(content)) {
-    return enhanceSimile(content);
-  }
+  const sentences = splitSentences(content);
+  if (sentences.length === 0) return "";
 
-  return enhanceWithContext(content, topic);
+  const primarySentence = rewritePrimarySentence(sentences[0], topic, content);
+  const secondarySentence = sentences[1]
+    ? ensureSentenceEnding(ensureSentenceCase(normalizeSpacing(fixBrokenGrammar(sentences[1]))))
+    : buildSupportSentence(topic, primarySentence);
+
+  return `${primarySentence} ${secondarySentence}`;
 };
 
 export const getImprovementChecklist = (topic: LearningTopic) => [

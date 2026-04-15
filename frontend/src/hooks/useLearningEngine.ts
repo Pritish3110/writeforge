@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useState } from "react";
 import {
+  type LearningCycleSummary,
   fetchLearningProgress,
   fetchLearningToday,
   submitSkillBuilderWriting,
@@ -24,6 +25,7 @@ export const useLearningEngine = ({
 }: UseLearningEngineOptions = {}) => {
   const [today, setToday] = useState<LearningTodaySummary | null>(null);
   const [progress, setProgress] = useState<LearningProgressSummary | null>(null);
+  const [cycle, setCycle] = useState<LearningCycleSummary | null>(null);
   const [loadingToday, setLoadingToday] = useState(loadToday);
   const [loadingProgress, setLoadingProgress] = useState(loadProgress && !loadToday);
   const [error, setError] = useState<string | null>(null);
@@ -39,6 +41,7 @@ export const useLearningEngine = ({
       const payload = await fetchLearningToday();
       setToday(payload.today);
       setProgress(payload.progress);
+      setCycle(payload.cycle);
       return payload;
     } catch {
       setError(LOAD_ERROR);
@@ -147,6 +150,7 @@ export const useLearningEngine = ({
   return {
     today,
     progress,
+    cycle,
     error,
     loadingToday,
     loadingProgress,

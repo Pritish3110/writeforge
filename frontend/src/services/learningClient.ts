@@ -8,6 +8,11 @@ export type LearningPathStatus = "completed" | "current" | "upcoming";
 export type SkillBuilderTrend = "improving" | "declining" | "steady";
 export type LearningSessionStep = "learn" | "write" | "improve" | "challenge";
 
+export interface LearningCycleSummary {
+  currentDate: string;
+  nextCycleAt: string;
+}
+
 export interface LearningConceptGuide {
   what: string;
   why: string;
@@ -179,6 +184,7 @@ export interface LearningTodayResponse {
   userId: string;
   today: LearningTodaySummary;
   progress: LearningProgressSummary;
+  cycle: LearningCycleSummary;
 }
 
 export interface LearningProgressResponse {
@@ -265,6 +271,7 @@ export interface LearningSessionResponse {
   success: boolean;
   userId: string;
   session: LearningSessionSummary;
+  cycle: LearningCycleSummary;
 }
 
 export interface LearningSessionUpdateResponse extends LearningSessionResponse {
@@ -279,6 +286,8 @@ export interface SkillBuilderChallengeResponse {
   progress: LearningProgressSummary;
   session: LearningSessionSummary;
 }
+
+export interface LearningResetResponse extends LearningSessionUpdateResponse {}
 
 const resolveLearningUserId = async () => {
   const currentUser = auth.currentUser;
@@ -311,6 +320,13 @@ const normalizeSession = (
   challengeScore: typeof session?.challengeScore === "number" ? session.challengeScore : null,
   finalScore: typeof session?.finalScore === "number" ? session.finalScore : null,
   completed: Boolean(session?.completed),
+});
+
+const normalizeCycle = (
+  cycle: Partial<LearningCycleSummary> | null | undefined,
+): LearningCycleSummary => ({
+  currentDate: String(cycle?.currentDate || ""),
+  nextCycleAt: String(cycle?.nextCycleAt || ""),
 });
 
 const normalizeBreakdownCategory = (
@@ -574,6 +590,7 @@ export const fetchLearningToday = async (): Promise<LearningTodayResponse> => {
 
   return {
     ...payload,
+    cycle: normalizeCycle(payload.cycle),
     today: {
       ...payload.today,
       new: normalizeQueueItem(payload.today?.new),
@@ -609,6 +626,7 @@ export const fetchLearningSessionToday = async (): Promise<LearningSessionRespon
   return {
     ...payload,
     session: normalizeSession(payload.session),
+    cycle: normalizeCycle(payload.cycle),
   };
 };
 
@@ -637,6 +655,7 @@ export const updateLearningSession = async ({
     ...payload,
     session: normalizeSession(payload.session),
     progress: normalizeProgress(payload.progress),
+    cycle: normalizeCycle(payload.cycle),
   };
 };
 
@@ -732,7 +751,7 @@ export const submitSkillBuilderChallenge = async ({
 
 export const resetSkillBuilderAttempts = async (
   topicId: string,
-): Promise<LearningSessionResponse> => {
+): Promise<LearningResetResponse> => {
   const response = await fetch(buildApiUrl("/api/learning/reset"), {
     method: "DELETE",
     headers: await createLearningHeaders(),
@@ -741,10 +760,12 @@ export const resetSkillBuilderAttempts = async (
     }),
   });
 
-  const payload = await readJson<LearningSessionResponse>(response);
+  const payload = await readJson<LearningResetResponse>(response);
 
   return {
     ...payload,
     session: normalizeSession(payload.session),
+    progress: normalizeProgress(payload.progress),
+    cycle: normalizeCycle(payload.cycle),
   };
 };

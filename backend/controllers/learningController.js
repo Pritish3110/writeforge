@@ -2,6 +2,7 @@ import {
   getLearningSessionToday,
   getLearningProgress,
   getLearningToday,
+  resetSkillBuilderProgress,
   submitSkillBuilderChallenge,
   submitSkillBuilderWriting,
   submitLearningReview,
@@ -196,6 +197,39 @@ export const submitChallenge = async (request, response, next) => {
       topicId,
       content,
       challengeScore,
+    });
+
+    response.status(200).json({
+      success: true,
+      userId,
+      ...payload,
+    });
+  } catch (error) {
+    next(error);
+  }
+};
+
+export const resetLearningProgress = async (request, response, next) => {
+  try {
+    const userId = resolveLearningUserId(request);
+    const topicId =
+      typeof request.body?.topicId === "string"
+        ? request.body.topicId.trim()
+        : typeof request.query?.topicId === "string"
+          ? request.query.topicId.trim()
+          : "";
+
+    if (!topicId) {
+      response.status(400).json({
+        success: false,
+        error: "topicId is required.",
+      });
+      return;
+    }
+
+    const payload = await resetSkillBuilderProgress({
+      userId,
+      topicId,
     });
 
     response.status(200).json({
