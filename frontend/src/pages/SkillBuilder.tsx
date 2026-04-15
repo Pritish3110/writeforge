@@ -453,7 +453,6 @@ const SkillBuilder = () => {
       });
       setSessionCycle(payload.cycle);
       if (nextStep) setActiveStep(nextStep);
-      void loadSession(false);
       void refreshToday();
     } catch {
       setSessionError("Could not save this step right now.");
@@ -476,7 +475,6 @@ const SkillBuilder = () => {
       });
       setChallengeResult(null);
       setActiveStep("improve");
-      void loadSession(false);
       void refreshToday();
     }
   };
@@ -536,7 +534,6 @@ const SkillBuilder = () => {
         finalScore: payload.finalScore,
         completed: true,
       });
-      void loadSession(false);
       void refreshToday();
     } catch {
       setSessionError("Challenge scoring could not be saved.");

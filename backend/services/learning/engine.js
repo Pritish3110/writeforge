@@ -533,7 +533,11 @@ const readUserLearningSessions = async (userId) => {
   return store
     .map(normalizeSessionRecord)
     .filter((record) => record.user_id === userId)
-    .sort((left, right) => right.date.localeCompare(left.date));
+    .sort(
+      (left, right) =>
+        right.date.localeCompare(left.date) ||
+        right.updated_at.localeCompare(left.updated_at),
+    );
 };
 
 const writeUserLearningSessions = async (userId, sessions) => {
@@ -568,23 +572,45 @@ const createSessionSnapshot = (session, topicId, dateKey = toDateKey()) =>
   );
 
 const getSessionForDate = (sessions, dateKey = toDateKey()) =>
-  sessions.find((session) => session.date === dateKey) || null;
+  sessions
+    .filter((session) => session.date === dateKey)
+    .sort(
+      (left, right) =>
+        right.updated_at.localeCompare(left.updated_at) ||
+        right.id.localeCompare(left.id),
+    )[0] || null;
 
 const getTodaySessionRecord = (sessions, topicId, dateKey = toDateKey()) => {
-  const sessionForDate = getSessionForDate(sessions, dateKey);
+  const sessionsForDate = sessions
+    .filter((session) => session.date === dateKey)
+    .sort(
+      (left, right) =>
+        right.updated_at.localeCompare(left.updated_at) ||
+        right.id.localeCompare(left.id),
+    );
+  const sessionForDate = sessionsForDate[0] || null;
 
   if (!sessionForDate) return null;
   if (!topicId) return sessionForDate;
-  if (!sessionForDate.topic_id || sessionForDate.topic_id === topicId) return sessionForDate;
+
+  const matchingSession = sessionsForDate.find(
+    (session) => !session.topic_id || session.topic_id === topicId,
+  );
+
+  if (matchingSession) return matchingSession;
 
   return null;
 };
 
 const persistSession = async ({ userId, sessions, session }) => {
   const nextSessions = sessions
-    .filter((item) => item.id !== session.id)
+    .filter((item) => item.id !== session.id && item.date !== session.date)
     .concat(session)
-    .sort((left, right) => right.date.localeCompare(left.date));
+    .sort(
+      (left, right) =>
+        right.date.localeCompare(left.date) ||
+        right.updated_at.localeCompare(left.updated_at),
+    );
 
   await writeUserLearningSessions(userId, nextSessions);
   return nextSessions;
