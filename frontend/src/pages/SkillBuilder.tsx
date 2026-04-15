@@ -243,6 +243,65 @@ const SkillBuilder = () => {
   const sessionProgress = (completedCount / sessionOrder.length) * 100;
   const improvementChecklist = topic ? getImprovementChecklist(topic) : [];
   const normalizedResetConfirmInput = resetConfirmInput.trim().toLowerCase();
+  const buildNextSessionState = useCallback(
+    (
+      previous: LearningSessionSummary | null,
+      incoming?: Partial<LearningSessionSummary> | null,
+      overrides?: Partial<LearningSessionSummary>,
+    ): LearningSessionSummary => {
+      const base: LearningSessionSummary = previous || {
+        id: "",
+        date: dateKey,
+        topicId,
+        steps: { ...emptySessionSteps },
+        writeScore: null,
+        challengeScore: null,
+        finalScore: null,
+        completed: false,
+      };
+      const mergedIncoming = incoming
+        ? {
+            ...base,
+            ...incoming,
+            steps: {
+              ...base.steps,
+              ...(incoming.steps || {}),
+            },
+          }
+        : base;
+      const merged = overrides
+        ? {
+            ...mergedIncoming,
+            ...overrides,
+            steps: {
+              ...mergedIncoming.steps,
+              ...(overrides.steps || {}),
+            },
+          }
+        : mergedIncoming;
+
+      return {
+        ...merged,
+        id: merged.id || base.id,
+        date: merged.date || dateKey,
+        topicId: merged.topicId || topicId,
+        completed:
+          typeof merged.completed === "boolean"
+            ? merged.completed
+            : Boolean(merged.steps.challenge),
+      };
+    },
+    [dateKey, topicId],
+  );
+  const applySessionUpdate = useCallback(
+    (
+      incoming?: Partial<LearningSessionSummary> | null,
+      overrides?: Partial<LearningSessionSummary>,
+    ) => {
+      setSession((previous) => buildNextSessionState(previous, incoming, overrides));
+    },
+    [buildNextSessionState],
+  );
 
   const resetLocalSessionState = useCallback(() => {
     setContent("");
@@ -387,9 +446,14 @@ const SkillBuilder = () => {
         step,
         completed: true,
       });
-      setSession(payload.session);
+      applySessionUpdate(payload.session, {
+        steps: {
+          [step]: true,
+        } as Partial<Record<LearningSessionStep, boolean>>,
+      });
       setSessionCycle(payload.cycle);
       if (nextStep) setActiveStep(nextStep);
+      void loadSession(false);
       void refreshToday();
     } catch {
       setSessionError("Could not save this step right now.");
@@ -404,9 +468,15 @@ const SkillBuilder = () => {
     const payload = await submitWriting(topicId, content);
     if (payload) {
       setResult(payload);
-      setSession(payload.session || null);
+      applySessionUpdate(payload.session, {
+        steps: {
+          write: true,
+        },
+        writeScore: payload.evaluation.score,
+      });
       setChallengeResult(null);
       setActiveStep("improve");
+      void loadSession(false);
       void refreshToday();
     }
   };
@@ -418,10 +488,6 @@ const SkillBuilder = () => {
     const rewrite = buildRuleBasedImprovement(content, topic);
     setCoachDraft(rewrite);
     setImproving(false);
-
-    if (!sessionState.improve) {
-      await persistStep("improve");
-    }
   };
 
   const completeImproveStep = async (acceptDraft: boolean) => {
@@ -462,7 +528,15 @@ const SkillBuilder = () => {
       }
 
       setChallengeResult(payload);
-      setSession(payload.session);
+      applySessionUpdate(payload.session, {
+        steps: {
+          challenge: true,
+        },
+        challengeScore: payload.evaluation.score,
+        finalScore: payload.finalScore,
+        completed: true,
+      });
+      void loadSession(false);
       void refreshToday();
     } catch {
       setSessionError("Challenge scoring could not be saved.");
@@ -484,7 +558,7 @@ const SkillBuilder = () => {
       }
 
       const payload = await resetSkillBuilderAttempts(topic.id);
-      setSession(payload.session);
+      applySessionUpdate(payload.session);
       setSessionCycle(payload.cycle);
       resetLocalSessionState();
       setShowResetModal(false);
