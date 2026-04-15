@@ -550,6 +550,21 @@ const writeUserLearningSessions = async (userId, sessions) => {
   await writeLearningSessionsStore(nextStore);
 };
 
+const sessionWriteQueue = new Map();
+
+const queueSessionWrite = async (userId, work) => {
+  const previousWrite = sessionWriteQueue.get(userId) || Promise.resolve();
+  const currentWrite = previousWrite.catch(() => undefined).then(work);
+  const trackedWrite = currentWrite.finally(() => {
+    if (sessionWriteQueue.get(userId) === trackedWrite) {
+      sessionWriteQueue.delete(userId);
+    }
+  });
+
+  sessionWriteQueue.set(userId, trackedWrite);
+  return trackedWrite;
+};
+
 const createSessionSnapshot = (session, topicId, dateKey = toDateKey()) =>
   normalizeSessionRecord(
     {
@@ -602,19 +617,53 @@ const getTodaySessionRecord = (sessions, topicId, dateKey = toDateKey()) => {
   return null;
 };
 
-const persistSession = async ({ userId, sessions, session }) => {
-  const nextSessions = sessions
-    .filter((item) => item.id !== session.id && item.date !== session.date)
-    .concat(session)
-    .sort(
-      (left, right) =>
-        right.date.localeCompare(left.date) ||
-        right.updated_at.localeCompare(left.updated_at),
-    );
+const mergeSessionSnapshots = (existingSession, incomingSession) => {
+  const mergedSession = createSessionSnapshot(
+    {
+      ...(existingSession || {}),
+      ...(incomingSession || {}),
+      id: existingSession?.id || incomingSession?.id,
+      user_id: incomingSession?.user_id || existingSession?.user_id,
+      topic_id: incomingSession?.topic_id || existingSession?.topic_id || "",
+      date: incomingSession?.date || existingSession?.date || toDateKey(),
+      created_at: existingSession?.created_at || incomingSession?.created_at,
+      write_score: incomingSession?.write_score ?? existingSession?.write_score ?? null,
+      challenge_score: incomingSession?.challenge_score ?? existingSession?.challenge_score ?? null,
+      final_score: incomingSession?.final_score ?? existingSession?.final_score ?? null,
+      completed: Boolean(incomingSession?.completed || existingSession?.completed),
+    },
+    incomingSession?.topic_id || existingSession?.topic_id || "",
+    incomingSession?.date || existingSession?.date || toDateKey(),
+  );
 
-  await writeUserLearningSessions(userId, nextSessions);
-  return nextSessions;
+  mergedSession.steps = {
+    learn: Boolean(existingSession?.steps?.learn || incomingSession?.steps?.learn),
+    write: Boolean(existingSession?.steps?.write || incomingSession?.steps?.write),
+    improve: Boolean(existingSession?.steps?.improve || incomingSession?.steps?.improve),
+    challenge: Boolean(existingSession?.steps?.challenge || incomingSession?.steps?.challenge),
+  };
+  mergedSession.completed = Boolean(mergedSession.completed || mergedSession.steps.challenge);
+
+  return mergedSession;
 };
+
+const persistSession = async ({ userId, session }) =>
+  queueSessionWrite(userId, async () => {
+    const latestSessions = await readUserLearningSessions(userId);
+    const existingSession = getTodaySessionRecord(latestSessions, session.topic_id, session.date);
+    const nextSession = mergeSessionSnapshots(existingSession, session);
+    const nextSessions = latestSessions
+      .filter((item) => item.id !== nextSession.id && item.date !== nextSession.date)
+      .concat(nextSession)
+      .sort(
+        (left, right) =>
+          right.date.localeCompare(left.date) ||
+          right.updated_at.localeCompare(left.updated_at),
+      );
+
+    await writeUserLearningSessions(userId, nextSessions);
+    return nextSessions;
+  });
 
 const buildThemeSummary = (curriculum, progressByTopicId) => {
   const grouped = new Map();

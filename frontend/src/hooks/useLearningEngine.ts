@@ -37,12 +37,22 @@ const createProgressResponse = (
   progress,
 });
 
-const syncProgressCache = (
+const syncLearningCaches = (
   queryClient: ReturnType<typeof useQueryClient>,
   userId: string,
   progress: LearningProgressSummary,
 ) => {
   queryClient.setQueryData(buildLearningProgressKey(userId), createProgressResponse(userId, progress));
+  queryClient.setQueryData(
+    buildLearningTodayKey(userId),
+    (current: LearningTodayResponse | undefined) =>
+      current
+        ? {
+            ...current,
+            progress,
+          }
+        : current,
+  );
 };
 
 export const useLearningEngine = ({
@@ -64,7 +74,7 @@ export const useLearningEngine = ({
     queryKey: todayQueryKey,
     queryFn: async () => {
       const payload = await fetchLearningToday();
-      syncProgressCache(queryClient, learningUserId, payload.progress);
+      syncLearningCaches(queryClient, learningUserId, payload.progress);
       return payload;
     },
     enabled: loadToday,
@@ -103,6 +113,13 @@ export const useLearningEngine = ({
     return result.data || null;
   }, [loadProgress, loadToday, progressQuery, refreshToday]);
 
+  const syncProgress = useCallback(
+    (progress: LearningProgressSummary) => {
+      syncLearningCaches(queryClient, learningUserId, progress);
+    },
+    [learningUserId, queryClient],
+  );
+
   const submitPerformance = useCallback(
     async (topicId: string, performance: LearningPerformance) => {
       setSubmittingTopicId(topicId);
@@ -110,7 +127,7 @@ export const useLearningEngine = ({
 
       try {
         const payload = await submitLearningPerformance(topicId, performance);
-        syncProgressCache(queryClient, learningUserId, payload.progress);
+        syncLearningCaches(queryClient, learningUserId, payload.progress);
 
         if (loadToday) {
           await refreshToday();
@@ -134,7 +151,7 @@ export const useLearningEngine = ({
 
       try {
         const payload = await submitSkillBuilderWriting(topicId, content);
-        syncProgressCache(queryClient, learningUserId, payload.progress);
+        syncLearningCaches(queryClient, learningUserId, payload.progress);
         return payload;
       } catch {
         setSubmitError(SUBMIT_ERROR);
@@ -174,6 +191,7 @@ export const useLearningEngine = ({
     submittingTopicId,
     refreshToday,
     refreshProgress,
+    syncProgress,
     submitPerformance,
     submitWriting,
   };

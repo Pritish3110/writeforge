@@ -15,6 +15,7 @@ import {
   type SkillBuilderSubmitResponse,
 } from "@/services/learningClient";
 import { useLearningEngine } from "@/hooks/useLearningEngine";
+import { mergeLearningSessionSummary } from "@/lib/learningSession";
 import {
   buildDailyChallengeTask,
   buildRuleBasedImprovement,
@@ -169,6 +170,7 @@ const SkillBuilder = () => {
     error,
     loadingToday,
     submittingTopicId,
+    syncProgress,
     submitWriting,
     refreshToday,
   } = useLearningEngine();
@@ -190,10 +192,17 @@ const SkillBuilder = () => {
   const [countdownMs, setCountdownMs] = useState<number | null>(null);
   const [refreshingCycle, setRefreshingCycle] = useState(false);
   const [lastCycleRefreshTarget, setLastCycleRefreshTarget] = useState<string | null>(null);
-  const currentItem = useMemo(
-    () => today?.application || today?.new || today?.reviews?.[0] || null,
-    [today],
-  );
+  const currentItem = useMemo(() => {
+    const queue = [today?.application, today?.new, ...(today?.reviews || [])].filter(
+      (item): item is LearningQueueItem => Boolean(item),
+    );
+
+    if (session?.topicId) {
+      return queue.find((item) => item.topicId === session.topicId) || queue[0] || null;
+    }
+
+    return queue[0] || null;
+  }, [session?.topicId, today?.application, today?.new, today?.reviews]);
   const topic = getTopicFromItem(currentItem);
   const topicId = topic?.id || "";
   const cycleInfo = cycle || sessionCycle;
@@ -243,64 +252,26 @@ const SkillBuilder = () => {
   const sessionProgress = (completedCount / sessionOrder.length) * 100;
   const improvementChecklist = topic ? getImprovementChecklist(topic) : [];
   const normalizedResetConfirmInput = resetConfirmInput.trim().toLowerCase();
-  const buildNextSessionState = useCallback(
-    (
-      previous: LearningSessionSummary | null,
-      incoming?: Partial<LearningSessionSummary> | null,
-      overrides?: Partial<LearningSessionSummary>,
-    ): LearningSessionSummary => {
-      const base: LearningSessionSummary = previous || {
-        id: "",
-        date: dateKey,
-        topicId,
-        steps: { ...emptySessionSteps },
-        writeScore: null,
-        challengeScore: null,
-        finalScore: null,
-        completed: false,
-      };
-      const mergedIncoming = incoming
-        ? {
-            ...base,
-            ...incoming,
-            steps: {
-              ...base.steps,
-              ...(incoming.steps || {}),
-            },
-          }
-        : base;
-      const merged = overrides
-        ? {
-            ...mergedIncoming,
-            ...overrides,
-            steps: {
-              ...mergedIncoming.steps,
-              ...(overrides.steps || {}),
-            },
-          }
-        : mergedIncoming;
-
-      return {
-        ...merged,
-        id: merged.id || base.id,
-        date: merged.date || dateKey,
-        topicId: merged.topicId || topicId,
-        completed:
-          typeof merged.completed === "boolean"
-            ? merged.completed
-            : Boolean(merged.steps.challenge),
-      };
-    },
-    [dateKey, topicId],
-  );
   const applySessionUpdate = useCallback(
     (
       incoming?: Partial<LearningSessionSummary> | null,
       overrides?: Partial<LearningSessionSummary>,
+      options?: {
+        preserveCompletedSteps?: boolean;
+      },
     ) => {
-      setSession((previous) => buildNextSessionState(previous, incoming, overrides));
+      setSession((previous) =>
+        mergeLearningSessionSummary({
+          previous,
+          incoming,
+          overrides,
+          defaultDate: dateKey,
+          defaultTopicId: topicId,
+          preserveCompletedSteps: options?.preserveCompletedSteps,
+        }),
+      );
     },
-    [buildNextSessionState],
+    [dateKey, topicId],
   );
 
   const resetLocalSessionState = useCallback(() => {
@@ -450,10 +421,10 @@ const SkillBuilder = () => {
         steps: {
           [step]: true,
         } as Partial<Record<LearningSessionStep, boolean>>,
-      });
+      }, { preserveCompletedSteps: true });
+      syncProgress(payload.progress);
       setSessionCycle(payload.cycle);
       if (nextStep) setActiveStep(nextStep);
-      void refreshToday();
     } catch {
       setSessionError("Could not save this step right now.");
     } finally {
@@ -472,10 +443,9 @@ const SkillBuilder = () => {
           write: true,
         },
         writeScore: payload.evaluation.score,
-      });
+      }, { preserveCompletedSteps: true });
       setChallengeResult(null);
       setActiveStep("improve");
-      void refreshToday();
     }
   };
 
@@ -533,8 +503,8 @@ const SkillBuilder = () => {
         challengeScore: payload.evaluation.score,
         finalScore: payload.finalScore,
         completed: true,
-      });
-      void refreshToday();
+      }, { preserveCompletedSteps: true });
+      syncProgress(payload.progress);
     } catch {
       setSessionError("Challenge scoring could not be saved.");
     }
@@ -615,56 +585,57 @@ const SkillBuilder = () => {
   return (
     <div className="mx-auto max-w-6xl space-y-6">
       <div className="space-y-4">
-        <div className="flex flex-wrap items-center gap-2">
-          <Badge variant="secondary" className="font-mono text-[11px] uppercase tracking-[0.14em]">
-            {topic.themeTitle}
-          </Badge>
-          <Badge variant="outline" className="font-mono text-[11px] uppercase tracking-[0.14em]">
-            {currentItem?.stage || "apply"}
-          </Badge>
-          <Badge variant="outline" className="font-mono text-[11px] uppercase tracking-[0.14em]">
-            Mastery {masteryItem?.mastery || 0}%
-          </Badge>
-          {session?.finalScore !== null && session?.finalScore !== undefined ? (
-            <Badge variant="outline" className="font-mono text-[11px] uppercase tracking-[0.14em]">
-              Today {session.finalScore}/100
-            </Badge>
-          ) : null}
-        </div>
-
-        <div className="rounded-[12px] border border-border bg-muted/20 px-4 py-3">
-          <p className="font-mono text-xs uppercase tracking-[0.18em] text-muted-foreground">
-            Next task in
-          </p>
-          <p className="mt-1 font-mono text-lg font-semibold">
-            {countdownMs === null ? "--:--:--" : formatCountdown(countdownMs)}
-          </p>
-        </div>
-
-        <div className="flex flex-col gap-4 lg:flex-row lg:items-end lg:justify-between">
-          <div>
+        <div className="flex flex-col gap-4 xl:flex-row xl:items-end xl:justify-between">
+          <div className="space-y-4">
+            <div className="flex flex-wrap items-center gap-2">
+              <Badge variant="secondary" className="font-mono text-[11px] uppercase tracking-[0.14em]">
+                {topic.themeTitle}
+              </Badge>
+              <Badge variant="outline" className="font-mono text-[11px] uppercase tracking-[0.14em]">
+                {currentItem?.stage || "apply"}
+              </Badge>
+              <Badge variant="outline" className="font-mono text-[11px] uppercase tracking-[0.14em]">
+                Mastery {masteryItem?.mastery || 0}%
+              </Badge>
+              {session?.finalScore !== null && session?.finalScore !== undefined ? (
+                <Badge variant="outline" className="font-mono text-[11px] uppercase tracking-[0.14em]">
+                  Today {session.finalScore}/100
+                </Badge>
+              ) : null}
+            </div>
             <h1 className="text-3xl font-bold tracking-tight">Skill Builder</h1>
             <p className="mt-1 font-mono text-sm text-muted-foreground">
               Today, go deeper with {topic.title.toLowerCase()} through guided learning, practice, revision, and challenge.
             </p>
           </div>
 
-          <div className="w-full max-w-sm rounded-[12px] bg-muted/25 p-4">
-            <div className="flex items-center justify-between text-xs uppercase tracking-[0.18em] text-muted-foreground">
-              <span>Session Completion</span>
-              <span>{completedCount}/4</span>
+          <div className="grid w-full gap-4 sm:grid-cols-[minmax(0,180px)_minmax(0,320px)] xl:w-auto xl:min-w-[540px]">
+            <div className="rounded-[12px] border border-border bg-muted/20 px-4 py-3">
+              <p className="font-mono text-xs uppercase tracking-[0.18em] text-muted-foreground">
+                Next task in
+              </p>
+              <p className="mt-1 font-mono text-lg font-semibold">
+                {countdownMs === null ? "--:--:--" : formatCountdown(countdownMs)}
+              </p>
             </div>
-            <Progress value={sessionProgress} className="mt-3 h-2" />
-            <div className="mt-3 grid grid-cols-2 gap-2">
-              {sessionOrder.map((step) => (
-                <StepPill
-                  key={step}
-                  active={activeStep === step}
-                  completed={sessionState[step]}
-                  label={`${sessionState[step] ? "✔" : "⬜"} ${sessionStepLabels[step]}`}
-                  onClick={() => setActiveStep(step)}
-                />
-              ))}
+
+            <div className="rounded-[12px] bg-muted/25 p-4">
+              <div className="flex items-center justify-between text-xs uppercase tracking-[0.18em] text-muted-foreground">
+                <span>Session Completion</span>
+                <span>{completedCount}/4</span>
+              </div>
+              <Progress value={sessionProgress} className="mt-3 h-2" />
+              <div className="mt-3 grid grid-cols-2 gap-2">
+                {sessionOrder.map((step) => (
+                  <StepPill
+                    key={step}
+                    active={activeStep === step}
+                    completed={sessionState[step]}
+                    label={`${sessionState[step] ? "✔" : "⬜"} ${sessionStepLabels[step]}`}
+                    onClick={() => setActiveStep(step)}
+                  />
+                ))}
+              </div>
             </div>
           </div>
         </div>
