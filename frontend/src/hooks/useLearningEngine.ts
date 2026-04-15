@@ -145,13 +145,23 @@ export const useLearningEngine = ({
   );
 
   const submitWriting = useCallback(
-    async (topicId: string, content: string): Promise<SkillBuilderSubmitResponse | null> => {
+    async (
+      topicId: string,
+      content: string,
+      options?: {
+        practiceOnly?: boolean;
+      },
+    ): Promise<SkillBuilderSubmitResponse | null> => {
       setSubmittingTopicId(topicId);
       setSubmitError(null);
 
       try {
-        const payload = await submitSkillBuilderWriting(topicId, content);
-        syncLearningCaches(queryClient, learningUserId, payload.progress);
+        const payload = await submitSkillBuilderWriting(topicId, content, options);
+
+        if (!payload.practiceOnly) {
+          syncLearningCaches(queryClient, learningUserId, payload.progress);
+        }
+
         return payload;
       } catch {
         setSubmitError(SUBMIT_ERROR);

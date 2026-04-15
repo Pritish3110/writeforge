@@ -79,6 +79,7 @@ export const submitWriting = async (request, response, next) => {
           ? request.body.topic_id
           : "";
     const content = typeof request.body?.content === "string" ? request.body.content : "";
+    const practiceOnly = request.body?.practiceOnly === true;
 
     if (!topicId.trim()) {
       response.status(400).json({
@@ -100,6 +101,7 @@ export const submitWriting = async (request, response, next) => {
       userId,
       topicId: topicId.trim(),
       content,
+      practiceOnly,
     });
 
     response.status(200).json({

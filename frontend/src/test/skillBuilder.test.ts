@@ -48,6 +48,8 @@ describe("skillBuilder helpers", () => {
 
     expect(["write", "identify", "transform"]).toContain(task.type);
     expect(task.prompt.length).toBeGreaterThan(10);
+    expect(task.difficultyLabel).toBe("Hard");
+    expect(task.requirements?.length || 0).toBeGreaterThan(0);
   });
 
   it("creates a deterministic rewrite and checklist", () => {

@@ -118,6 +118,11 @@ const emptySessionSteps: Record<SessionStep, boolean> = {
   improve: false,
   challenge: false,
 };
+const evaluationDimensionCopy = {
+  structure: "Technique Control",
+  creativity: "Image Power",
+  clarity: "Sentence Flow",
+} as const;
 
 const tooltipStyle = {
   background: "hsl(var(--card))",
@@ -185,6 +190,8 @@ const SkillBuilder = () => {
   const [sessionError, setSessionError] = useState<string | null>(null);
   const [persistingStep, setPersistingStep] = useState<LearningSessionStep | null>(null);
   const [challengeResponse, setChallengeResponse] = useState("");
+  const [showPracticeModal, setShowPracticeModal] = useState(false);
+  const [practiceNoticeSeen, setPracticeNoticeSeen] = useState(false);
   const [showResetModal, setShowResetModal] = useState(false);
   const [resetConfirmInput, setResetConfirmInput] = useState("");
   const [isResetting, setIsResetting] = useState(false);
@@ -247,7 +254,7 @@ const SkillBuilder = () => {
   const isWriteLocked = sessionState.write;
   const isImproveLocked = sessionState.improve;
   const isChallengeLocked = sessionState.challenge;
-  const canSubmit = Boolean(topic && validation.isValid && !isSubmitting && !isWriteLocked);
+  const canSubmit = Boolean(topic && validation.isValid && !isSubmitting);
   const completedCount = sessionOrder.filter((step) => sessionState[step]).length;
   const sessionProgress = (completedCount / sessionOrder.length) * 100;
   const improvementChecklist = topic ? getImprovementChecklist(topic) : [];
@@ -280,6 +287,8 @@ const SkillBuilder = () => {
     setChallengeResult(null);
     setCoachDraft("");
     setChallengeResponse("");
+    setShowPracticeModal(false);
+    setPracticeNoticeSeen(false);
     setActiveStep("learn");
   }, []);
 
@@ -432,21 +441,34 @@ const SkillBuilder = () => {
     }
   };
 
-  const handleSubmit = async () => {
-    if (!topicId || !validation.isValid || isWriteLocked) return;
+  const submitWritingAttempt = async (practiceOnly: boolean) => {
+    if (!topicId || !validation.isValid || isSubmitting) return;
 
-    const payload = await submitWriting(topicId, content);
+    const payload = await submitWriting(topicId, content, { practiceOnly });
     if (payload) {
       setResult(payload);
-      applySessionUpdate(payload.session, {
-        steps: {
-          write: true,
-        },
-        writeScore: payload.evaluation.score,
-      }, { preserveCompletedSteps: true });
-      setChallengeResult(null);
-      setActiveStep("improve");
+      if (!practiceOnly) {
+        applySessionUpdate(payload.session, {
+          steps: {
+            write: true,
+          },
+          writeScore: payload.evaluation.score,
+        }, { preserveCompletedSteps: true });
+        setChallengeResult(null);
+        setActiveStep("improve");
+      }
     }
+  };
+
+  const handleSubmit = async () => {
+    if (!topicId || !validation.isValid || isSubmitting) return;
+
+    if (isWriteLocked && !practiceNoticeSeen) {
+      setShowPracticeModal(true);
+      return;
+    }
+
+    await submitWritingAttempt(isWriteLocked);
   };
 
   const handleCoachRewrite = async () => {
@@ -592,9 +614,6 @@ const SkillBuilder = () => {
                 {topic.themeTitle}
               </Badge>
               <Badge variant="outline" className="font-mono text-[11px] uppercase tracking-[0.14em]">
-                {currentItem?.stage || "apply"}
-              </Badge>
-              <Badge variant="outline" className="font-mono text-[11px] uppercase tracking-[0.14em]">
                 Mastery {masteryItem?.mastery || 0}%
               </Badge>
               {session?.finalScore !== null && session?.finalScore !== undefined ? (
@@ -605,7 +624,7 @@ const SkillBuilder = () => {
             </div>
             <h1 className="text-3xl font-bold tracking-tight">Skill Builder</h1>
             <p className="mt-1 font-mono text-sm text-muted-foreground">
-              Today, go deeper with {topic.title.toLowerCase()} through guided learning, practice, revision, and challenge.
+              Today you are sharpening {topic.title.toLowerCase()} through study, draftwork, refinement, and a final pressure test.
             </p>
           </div>
 
@@ -621,7 +640,7 @@ const SkillBuilder = () => {
 
             <div className="rounded-[12px] bg-muted/25 p-4">
               <div className="flex items-center justify-between text-xs uppercase tracking-[0.18em] text-muted-foreground">
-                <span>Session Completion</span>
+                <span>Session Arc</span>
                 <span>{completedCount}/4</span>
               </div>
               <Progress value={sessionProgress} className="mt-3 h-2" />
@@ -782,7 +801,7 @@ const SkillBuilder = () => {
           <CardHeader>
             <CardTitle className="flex items-center gap-2 text-base">
               <PencilLine className="h-4 w-4 text-neon-purple" />
-              Step 2: Write
+              Step 2: Draft the Passage
             </CardTitle>
           </CardHeader>
           <CardContent className="space-y-5">
@@ -802,13 +821,18 @@ const SkillBuilder = () => {
                   setResult(null);
                   setCoachDraft("");
                 }}
-                disabled={isWriteLocked}
                 placeholder="Write 2-3 sentences here..."
                 className="min-h-[220px] resize-none bg-background/40 text-base leading-7"
               />
               <div className="flex flex-wrap items-center justify-between gap-3 text-xs text-muted-foreground">
                 <span>{validation.wordCount} words · {validation.sentenceCount} sentences</span>
-                <span>{isWriteLocked ? "Write step saved for today." : validation.message}</span>
+                <span>
+                  {isWriteLocked
+                    ? validation.isValid
+                      ? "Scored pass complete. Further submissions are private practice and do not affect streaks, mastery, or analytics."
+                      : `${validation.message} Practice passes stay private and do not affect tracked progress.`
+                    : validation.message}
+                </span>
               </div>
             </div>
 
@@ -818,7 +842,11 @@ const SkillBuilder = () => {
               disabled={!canSubmit}
               onClick={() => void handleSubmit()}
             >
-              {isSubmitting ? "Evaluating..." : isWriteLocked ? "Write Step Complete" : "Submit & Evaluate"}
+              {isSubmitting
+                ? "Reading Your Lines..."
+                : isWriteLocked
+                  ? "Practice-Only Evaluation"
+                  : "Submit & Evaluate"}
               <ArrowRight className="h-4 w-4" />
             </Button>
           </CardContent>
@@ -828,12 +856,12 @@ const SkillBuilder = () => {
           <CardHeader>
             <CardTitle className="flex items-center gap-2 text-base">
               <WandSparkles className="h-4 w-4 text-neon-cyan" />
-              Step 3: Improve
+              Step 3: Refine the Passage
             </CardTitle>
           </CardHeader>
           <CardContent className="space-y-4">
             <div className="rounded-[12px] bg-muted/20 p-4 text-sm leading-7 text-muted-foreground">
-              Deterministic rewrite engine: stronger detail, clearer subject, tighter context.
+              Ask the page for a sharper pass: stronger texture, cleaner sentence movement, and more pressure inside the image.
             </div>
 
             <div className="space-y-2 rounded-[12px] border border-border bg-muted/10 p-4">
@@ -852,10 +880,10 @@ const SkillBuilder = () => {
               onClick={() => void handleCoachRewrite()}
             >
               {improving || persistingStep === "improve"
-                ? "Building Rewrite..."
+                ? "Sharpening Draft..."
                 : isImproveLocked
                   ? "Improve Step Complete"
-                  : "Generate Rule-Based Rewrite"}
+                  : "Generate a Sharper Rewrite"}
               <Sparkles className="h-4 w-4" />
             </Button>
 
@@ -864,7 +892,7 @@ const SkillBuilder = () => {
                 <div className="flex items-center justify-between gap-3">
                   <p className="text-sm font-medium">Suggested rewrite</p>
                   <Badge variant="outline" className="font-mono text-[11px] uppercase tracking-[0.14em]">
-                    Rule-based
+                    Coach pass
                   </Badge>
                 </div>
                 <p className="text-sm leading-7">{coachDraft}</p>
@@ -879,7 +907,7 @@ const SkillBuilder = () => {
               </div>
             ) : (
               <p className="text-sm text-muted-foreground">
-                Generate a rewrite after Step 2 to get concrete, repeatable improvement guidance.
+                Generate a rewrite after the scored pass to see how a stronger, cleaner version could carry the same idea.
               </p>
             )}
           </CardContent>
@@ -891,10 +919,16 @@ const SkillBuilder = () => {
           <CardHeader>
             <CardTitle className="flex items-center gap-2 text-base">
               <CheckCircle2 className="h-4 w-4 text-neon-cyan" />
-              Advanced Evaluation
+              {result.practiceOnly ? "Private Practice Feedback" : "Scored Feedback"}
             </CardTitle>
           </CardHeader>
           <CardContent className="space-y-5">
+            {result.practiceOnly ? (
+              <div className="rounded-[12px] border border-neon-cyan/30 bg-neon-cyan/5 p-4 text-sm leading-7 text-muted-foreground">
+                This is a private practice read. The score is visible only here and does not feed mastery, streaks,
+                heatmaps, analytics, or counted attempts.
+              </div>
+            ) : null}
             <div className="grid gap-4 lg:grid-cols-[180px_1fr]">
               <div>
                 <p className="font-mono text-4xl font-bold text-neon-cyan">
@@ -916,7 +950,9 @@ const SkillBuilder = () => {
                 <div className="grid gap-3 md:grid-cols-3">
                   {Object.entries(result.evaluation.breakdown).map(([key, value]) => (
                     <div key={key} className="rounded-[12px] border border-border bg-muted/10 p-4">
-                      <p className="text-xs uppercase tracking-[0.18em] text-muted-foreground">{key}</p>
+                      <p className="text-xs uppercase tracking-[0.18em] text-muted-foreground">
+                        {evaluationDimensionCopy[key as keyof typeof evaluationDimensionCopy] || key}
+                      </p>
                       <p className="mt-2 text-2xl font-semibold">{value.score}</p>
                       <p className="mt-2 text-xs text-muted-foreground">{value.detail}</p>
                     </div>
@@ -927,11 +963,11 @@ const SkillBuilder = () => {
 
             <div className="grid gap-4 lg:grid-cols-2">
               <div className="rounded-[12px] bg-muted/20 p-4">
-                <p className="text-xs uppercase tracking-[0.18em] text-muted-foreground">Your Draft</p>
+                <p className="text-xs uppercase tracking-[0.18em] text-muted-foreground">What You Wrote</p>
                 <p className="mt-2 text-sm leading-7">{result.entry.content}</p>
               </div>
               <div className="rounded-[12px] bg-muted/20 p-4">
-                <p className="text-xs uppercase tracking-[0.18em] text-muted-foreground">Actionable Fixes</p>
+                <p className="text-xs uppercase tracking-[0.18em] text-muted-foreground">Next Revision Moves</p>
                 <div className="mt-2 space-y-2">
                   {result.evaluation.weakParts.length > 0 ? (
                     result.evaluation.weakParts.map((item) => (
@@ -956,16 +992,36 @@ const SkillBuilder = () => {
           <CardHeader>
             <CardTitle className="flex items-center gap-2 text-base">
               <Sparkles className="h-4 w-4 text-neon-pink" />
-              Step 4: Challenge
+              Step 4: Pressure Test
             </CardTitle>
           </CardHeader>
           <CardContent className="space-y-4">
             {challengeTask ? (
               <>
                 <div className="rounded-[12px] bg-muted/20 p-4">
-                  <p className="text-sm font-medium">{challengeTask.title}</p>
+                  <div className="flex flex-wrap items-center gap-2">
+                    <p className="text-sm font-medium">{challengeTask.title}</p>
+                    {challengeTask.difficultyLabel ? (
+                      <Badge variant="outline" className="font-mono text-[11px] uppercase tracking-[0.14em]">
+                        {challengeTask.difficultyLabel}
+                      </Badge>
+                    ) : null}
+                  </div>
                   <p className="mt-2 text-sm leading-7 text-muted-foreground">{challengeTask.prompt}</p>
                 </div>
+
+                {challengeTask.requirements?.length ? (
+                  <div className="rounded-[12px] border border-border bg-muted/10 p-4">
+                    <p className="text-xs uppercase tracking-[0.18em] text-muted-foreground">What This Demands</p>
+                    <div className="mt-3 space-y-2">
+                      {challengeTask.requirements.map((requirement) => (
+                        <p key={requirement} className="text-sm leading-6 text-muted-foreground">
+                          {requirement}
+                        </p>
+                      ))}
+                    </div>
+                  </div>
+                ) : null}
 
                 {challengeTask.type === "identify" ? (
                   <div className="grid gap-2">
@@ -975,7 +1031,7 @@ const SkillBuilder = () => {
                         type="button"
                         variant="secondary"
                         disabled={isChallengeLocked}
-                        className="justify-start"
+                        className="h-auto justify-start whitespace-normal py-3 text-left leading-6"
                         onClick={() => void handleChallengeSubmit(option.id)}
                       >
                         {option.label}
@@ -988,26 +1044,26 @@ const SkillBuilder = () => {
                       value={challengeResponse}
                       onChange={(event) => setChallengeResponse(event.target.value)}
                       disabled={isChallengeLocked}
-                      placeholder="Write your challenge response here..."
+                      placeholder={challengeTask.placeholder || "Write your challenge response here..."}
                       className="min-h-[150px] resize-none bg-background/40 text-base leading-7"
                     />
                     <Button type="button" disabled={isChallengeLocked} onClick={() => void handleChallengeSubmit()}>
-                      {isChallengeLocked ? "Challenge Complete" : "Complete Challenge"}
+                      {isChallengeLocked ? "Pressure Test Complete" : challengeTask.ctaLabel || "Complete Challenge"}
                     </Button>
                   </div>
                 )}
 
                 {challengeTask.sampleAnswer ? (
-                  <p className="text-xs text-muted-foreground">Example: {challengeTask.sampleAnswer}</p>
+                  <p className="text-xs text-muted-foreground">Benchmark direction: {challengeTask.sampleAnswer}</p>
                 ) : null}
 
                 {challengeResult ? (
                   <div className="space-y-3 rounded-[12px] border border-border bg-muted/10 p-4">
-                    <p className="text-sm font-medium">Challenge scored</p>
+                    <p className="text-sm font-medium">Pressure test scored</p>
                     <p className="text-sm text-muted-foreground">{challengeResult.evaluation.feedback}</p>
                     <div className="flex flex-wrap gap-3 text-sm">
                       <span>Challenge: {challengeResult.evaluation.score}/100</span>
-                      <span>Final: {challengeResult.finalScore}/100</span>
+                      <span>Session total: {challengeResult.finalScore}/100</span>
                     </div>
                   </div>
                 ) : null}
@@ -1021,7 +1077,7 @@ const SkillBuilder = () => {
             <div className="flex flex-wrap items-center justify-between gap-3">
               <CardTitle className="flex items-center gap-2 text-base">
                 <TrendingUp className="h-4 w-4 text-neon-cyan" />
-                Previous Attempts
+                Counted Sessions
               </CardTitle>
               <Button
                 type="button"
@@ -1036,7 +1092,7 @@ const SkillBuilder = () => {
           <CardContent className="space-y-4">
             <div className="flex flex-wrap items-center justify-between gap-3">
               <div>
-                <p className="text-sm font-medium">Recent trend</p>
+                <p className="text-sm font-medium">Current momentum</p>
                 <p className="text-sm text-muted-foreground">
                   {getTrendLabel(progress.skillBuilderInsights?.trend || "steady")}
                 </p>
@@ -1086,7 +1142,7 @@ const SkillBuilder = () => {
                 ))
               ) : (
                 <div className="rounded-[12px] border border-border bg-muted/10 p-4 text-sm text-muted-foreground">
-                  Your last five submissions will show up here once you start practicing.
+                  Your counted submissions will gather here as you complete scored sessions.
                 </div>
               )}
             </div>
@@ -1112,7 +1168,7 @@ const SkillBuilder = () => {
           <CardHeader className="pb-2">
             <CardTitle className="flex items-center gap-2 text-sm font-mono text-muted-foreground">
               <BrainCircuit className="h-4 w-4 text-neon-cyan" />
-              Weak Area
+              Next Pressure Point
             </CardTitle>
           </CardHeader>
           <CardContent>
@@ -1136,10 +1192,49 @@ const SkillBuilder = () => {
           </CardHeader>
           <CardContent>
             <p className="text-3xl font-bold font-mono">{masteryItem?.mastery || 0}%</p>
-            <p className="mt-1 text-xs text-muted-foreground">based on attempts, scores, challenge results, and SRS stage</p>
+            <p className="mt-1 text-xs text-muted-foreground">
+              Mastery rises slowly from repeated strong sessions, not from a single good day.
+            </p>
           </CardContent>
         </Card>
       </div>
+
+      <Dialog open={showPracticeModal} onOpenChange={setShowPracticeModal}>
+        <DialogContent className="glow-border sm:max-w-md">
+          <DialogHeader>
+            <DialogTitle className="font-mono text-base">Practice-only evaluation?</DialogTitle>
+            <DialogDescription className="leading-6">
+              Your scored draft is already locked into today&apos;s session. A second or later submission is still useful,
+              but it stays private and will not change mastery, streaks, heatmaps, analytics, or counted attempts.
+            </DialogDescription>
+          </DialogHeader>
+
+          <div className="rounded-[12px] border border-border bg-muted/10 p-4 text-sm leading-7 text-muted-foreground">
+            Use this mode when you want more feedback, another pass, or a cleaner version of the same idea without
+            moving your tracked progress.
+          </div>
+
+          <DialogFooter className="gap-2 sm:justify-start">
+            <Button
+              type="button"
+              variant="secondary"
+              onClick={() => setShowPracticeModal(false)}
+            >
+              Cancel
+            </Button>
+            <Button
+              type="button"
+              onClick={() => {
+                setPracticeNoticeSeen(true);
+                setShowPracticeModal(false);
+                void submitWritingAttempt(true);
+              }}
+            >
+              Continue in Practice Mode
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
 
       <Dialog open={showResetModal} onOpenChange={setShowResetModal}>
         <DialogContent className="glow-border sm:max-w-md">

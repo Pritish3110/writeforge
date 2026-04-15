@@ -249,6 +249,7 @@ export interface SkillBuilderSubmitResponse {
   userId: string;
   entry: SkillBuilderEntry;
   evaluation: SkillBuilderEvaluation;
+  practiceOnly?: boolean;
   performance: LearningPerformance;
   progress: LearningProgressSummary;
   stage: LearningStage;
@@ -507,6 +508,7 @@ const normalizeSubmitResponse = (
   payload: SkillBuilderSubmitResponse,
 ): SkillBuilderSubmitResponse => ({
   ...payload,
+  practiceOnly: Boolean(payload.practiceOnly),
   progress: normalizeProgress(payload.progress),
   session: payload.session ? normalizeSession(payload.session) : undefined,
   entry: {
@@ -683,6 +685,9 @@ export const submitLearningPerformance = async (
 export const submitSkillBuilderWriting = async (
   topicId: string,
   content: string,
+  options?: {
+    practiceOnly?: boolean;
+  },
 ): Promise<SkillBuilderSubmitResponse> => {
   const response = await fetch(buildApiUrl("/api/learning/submit-writing"), {
     method: "POST",
@@ -690,6 +695,7 @@ export const submitSkillBuilderWriting = async (
     body: JSON.stringify({
       topicId,
       content,
+      practiceOnly: Boolean(options?.practiceOnly),
     }),
   });
 

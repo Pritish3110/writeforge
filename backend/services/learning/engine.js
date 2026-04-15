@@ -802,10 +802,10 @@ const getTopicMastery = (record, topicEntries, topicSessions = []) => {
   if (!record && topicEntries.length === 0 && topicSessions.length === 0) return 0;
 
   const stageWeights = {
-    learn: 30,
-    recognize: 55,
-    apply: 75,
-    mastered: 100,
+    learn: 8,
+    recognize: 20,
+    apply: 42,
+    mastered: 82,
   };
   const stageScore = record ? stageWeights[record.stage] || 0 : 0;
   const combinedScores = topicEntries
@@ -815,9 +815,12 @@ const getTopicMastery = (record, topicEntries, topicSessions = []) => {
     combinedScores.length > 0
       ? combinedScores.reduce((sum, score) => sum + score, 0) / combinedScores.length
       : 0;
-  const attemptsBoost = Math.min((topicEntries.length + topicSessions.length) * 6, 20);
+  const scoredAttempts = combinedScores.length;
+  const sustainedScore = avgScore * Math.min(scoredAttempts, 5) / 5;
+  const attemptsBoost = Math.min(scoredAttempts * 1.5, 8);
+  const challengeBoost = Math.min(topicSessions.length * 5, 10);
 
-  return clampScore(stageScore * 0.6 + avgScore * 0.25 + attemptsBoost);
+  return clampScore(stageScore * 0.55 + sustainedScore * 0.3 + attemptsBoost + challengeBoost);
 };
 
 const getTrendDirection = (scores) => {
@@ -1194,7 +1197,6 @@ export const updateLearningSession = async ({ userId, topicId, step, completed =
 
   const nextSessions = await persistSession({
     userId,
-    sessions,
     session: nextSession,
   });
 
@@ -1287,7 +1289,7 @@ export const submitLearningReview = async ({ userId, topicId, performance }) => 
   };
 };
 
-export const submitSkillBuilderWriting = async ({ userId, topicId, content }) => {
+export const submitSkillBuilderWriting = async ({ userId, topicId, content, practiceOnly = false }) => {
   const trimmedContent = String(content || "").trim();
   const curriculum = await readCurriculum();
   const topic = curriculum.find((item) => item.id === topicId);
@@ -1305,12 +1307,6 @@ export const submitSkillBuilderWriting = async ({ userId, topicId, content }) =>
   }
 
   const evaluation = evaluateWriting({ topic, content: trimmedContent });
-  const performance = scoreToPerformance(evaluation.score);
-  const progressResult = await submitLearningReview({
-    userId,
-    topicId,
-    performance,
-  });
   const existingEntries = await readUserSkillBuilderEntries(userId);
   const existingSessions = await readUserLearningSessions(userId);
   const now = new Date().toISOString();
@@ -1330,15 +1326,36 @@ export const submitSkillBuilderWriting = async ({ userId, topicId, content }) =>
     },
     existingEntries.length,
   );
-  const nextEntries = [entry, ...existingEntries];
   const records = await readUserProgress(userId);
+
+  if (practiceOnly) {
+    const existingSession = getTodaySessionRecord(existingSessions, topicId);
+
+    return {
+      entry,
+      evaluation,
+      practiceOnly: true,
+      performance: scoreToPerformance(evaluation.score),
+      progress: buildProgressSummary(curriculum, records, existingEntries, existingSessions),
+      stage: records.find((record) => record.topic_id === topicId)?.stage || "apply",
+      nextReview: "",
+      session: buildSessionResponse({ session: existingSession, topicId }),
+    };
+  }
+
+  const performance = scoreToPerformance(evaluation.score);
+  const progressResult = await submitLearningReview({
+    userId,
+    topicId,
+    performance,
+  });
+  const nextEntries = [entry, ...existingEntries];
   const existingSession = getTodaySessionRecord(existingSessions, topicId);
   const nextSession = createSessionSnapshot(existingSession, topicId);
   nextSession.steps.write = true;
   nextSession.write_score = evaluation.score;
   const nextSessions = await persistSession({
     userId,
-    sessions: existingSessions,
     session: nextSession,
   });
 
@@ -1347,6 +1364,7 @@ export const submitSkillBuilderWriting = async ({ userId, topicId, content }) =>
   return {
     entry,
     evaluation,
+    practiceOnly: false,
     performance,
     progress: buildProgressSummary(curriculum, records, nextEntries, nextSessions),
     stage: progressResult.stage,
@@ -1443,7 +1461,6 @@ export const submitSkillBuilderChallenge = async ({
 
   const nextSessions = await persistSession({
     userId,
-    sessions: existingSessions,
     session: nextSession,
   });
 
