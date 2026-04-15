@@ -414,7 +414,7 @@ const SkillBuilder = () => {
   const persistStep = async (step: LearningSessionStep, nextStep?: SessionStep) => {
     if (!topicId || sessionState[step]) {
       if (nextStep) setActiveStep(nextStep);
-      return;
+      return true;
     }
 
     setPersistingStep(step);
@@ -434,17 +434,30 @@ const SkillBuilder = () => {
       syncProgress(payload.progress);
       setSessionCycle(payload.cycle);
       if (nextStep) setActiveStep(nextStep);
+      return true;
     } catch {
       setSessionError("Could not save this step right now.");
+      return false;
     } finally {
       setPersistingStep(null);
     }
   };
 
-  const submitWritingAttempt = async (practiceOnly: boolean) => {
-    if (!topicId || !validation.isValid || isSubmitting) return;
+  const submitWritingAttempt = async ({
+    practiceOnly,
+    contentValue = content,
+    requireValidDraft = true,
+  }: {
+    practiceOnly: boolean;
+    contentValue?: string;
+    requireValidDraft?: boolean;
+  }) => {
+    const draftValidation = validateSkillBuilderDraft(contentValue);
+    if (!topicId || isSubmitting || !contentValue.trim() || (requireValidDraft && !draftValidation.isValid)) {
+      return false;
+    }
 
-    const payload = await submitWriting(topicId, content, { practiceOnly });
+    const payload = await submitWriting(topicId, contentValue, { practiceOnly });
     if (payload) {
       setResult(payload);
       if (!practiceOnly) {
@@ -457,7 +470,10 @@ const SkillBuilder = () => {
         setChallengeResult(null);
         setActiveStep("improve");
       }
+      return true;
     }
+
+    return false;
   };
 
   const handleSubmit = async () => {
@@ -468,7 +484,14 @@ const SkillBuilder = () => {
       return;
     }
 
-    await submitWritingAttempt(isWriteLocked);
+    if (!isWriteLocked && !sessionState.learn) {
+      const learnSaved = await persistStep("learn");
+      if (!learnSaved) return;
+    }
+
+    await submitWritingAttempt({
+      practiceOnly: isWriteLocked,
+    });
   };
 
   const handleCoachRewrite = async () => {
@@ -481,9 +504,25 @@ const SkillBuilder = () => {
   };
 
   const completeImproveStep = async (acceptDraft: boolean) => {
+    const finalContent = acceptDraft && coachDraft ? coachDraft : content;
+
     if (acceptDraft && coachDraft) {
-      setContent(coachDraft);
+      setContent(finalContent);
       setResult(null);
+    }
+
+    if (!sessionState.learn) {
+      const learnSaved = await persistStep("learn");
+      if (!learnSaved) return;
+    }
+
+    if (!sessionState.write) {
+      const writeSaved = await submitWritingAttempt({
+        practiceOnly: false,
+        contentValue: finalContent,
+        requireValidDraft: false,
+      });
+      if (!writeSaved) return;
     }
 
     if (!sessionState.improve) {
@@ -1227,7 +1266,9 @@ const SkillBuilder = () => {
               onClick={() => {
                 setPracticeNoticeSeen(true);
                 setShowPracticeModal(false);
-                void submitWritingAttempt(true);
+                void submitWritingAttempt({
+                  practiceOnly: true,
+                });
               }}
             >
               Continue in Practice Mode
