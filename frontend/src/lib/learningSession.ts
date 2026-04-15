@@ -75,8 +75,7 @@ export const mergeLearningSessionSummary = ({
   const sameSession =
     Boolean(previous) &&
     resolvedDate === previous.date &&
-    resolvedTopicId === previous.topicId &&
-    (resolvedId ? resolvedId === previous.id : true);
+    resolvedTopicId === previous.topicId;
   const steps = mergeSessionSteps(
     sameSession ? previous?.steps : base.steps,
     incoming?.steps,
@@ -98,4 +97,3 @@ export const mergeLearningSessionSummary = ({
     completed: Boolean(merged.completed || steps.challenge),
   };
 };
-

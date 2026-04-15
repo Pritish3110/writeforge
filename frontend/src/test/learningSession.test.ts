@@ -66,6 +66,28 @@ describe("mergeLearningSessionSummary", () => {
     expect(merged.steps.learn).toBe(false);
   });
 
+  it("keeps completed steps when the backend returns a replacement id for the same topic and date", () => {
+    const merged = mergeLearningSessionSummary({
+      previous: baseSession,
+      incoming: {
+        id: "session-2",
+        date: "2026-04-15",
+        topicId: "simile",
+        steps: {
+          learn: false,
+          write: true,
+          improve: false,
+          challenge: false,
+        },
+      },
+      preserveCompletedSteps: true,
+    });
+
+    expect(merged.id).toBe("session-2");
+    expect(merged.steps.learn).toBe(true);
+    expect(merged.steps.write).toBe(true);
+  });
+
   it("marks the session complete when the challenge step is finished", () => {
     const merged = mergeLearningSessionSummary({
       previous: baseSession,
@@ -82,4 +104,3 @@ describe("mergeLearningSessionSummary", () => {
     expect(merged.completed).toBe(true);
   });
 });
-

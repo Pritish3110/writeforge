@@ -617,13 +617,13 @@ const getTodaySessionRecord = (sessions, topicId, dateKey = toDateKey()) => {
   return null;
 };
 
-const mergeSessionSnapshots = (existingSession, incomingSession) => {
+const mergeSessionSnapshots = (existingSession, incomingSession, userId) => {
   const mergedSession = createSessionSnapshot(
     {
       ...(existingSession || {}),
       ...(incomingSession || {}),
       id: existingSession?.id || incomingSession?.id,
-      user_id: incomingSession?.user_id || existingSession?.user_id,
+      user_id: userId || incomingSession?.user_id || existingSession?.user_id,
       topic_id: incomingSession?.topic_id || existingSession?.topic_id || "",
       date: incomingSession?.date || existingSession?.date || toDateKey(),
       created_at: existingSession?.created_at || incomingSession?.created_at,
@@ -651,7 +651,7 @@ const persistSession = async ({ userId, session }) =>
   queueSessionWrite(userId, async () => {
     const latestSessions = await readUserLearningSessions(userId);
     const existingSession = getTodaySessionRecord(latestSessions, session.topic_id, session.date);
-    const nextSession = mergeSessionSnapshots(existingSession, session);
+    const nextSession = mergeSessionSnapshots(existingSession, session, userId);
     const nextSessions = latestSessions
       .filter((item) => item.id !== nextSession.id && item.date !== nextSession.date)
       .concat(nextSession)
