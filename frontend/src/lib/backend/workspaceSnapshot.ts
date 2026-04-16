@@ -29,6 +29,7 @@ export interface WorkspaceSnapshot {
   characterRelationships: unknown[];
   plotPoints: unknown[];
   drafts: unknown[];
+  bookshelf: unknown[];
   worldElements: unknown[];
   knowledgeBaseSections: unknown[];
 }
@@ -70,6 +71,11 @@ export const WORKSPACE_COLLECTIONS = [
     snapshotKey: "drafts",
     storageKey: STORAGE_KEYS.drafts,
     collectionName: "drafts",
+  },
+  {
+    snapshotKey: "bookshelf",
+    storageKey: STORAGE_KEYS.bookshelf,
+    collectionName: "bookshelf",
   },
   {
     snapshotKey: "worldElements",
@@ -207,6 +213,7 @@ export const createEmptyWorkspaceSnapshot = (userId: string): WorkspaceSnapshot 
   characterRelationships: [],
   plotPoints: [],
   drafts: [],
+  bookshelf: [],
   worldElements: [],
   knowledgeBaseSections: [],
 });

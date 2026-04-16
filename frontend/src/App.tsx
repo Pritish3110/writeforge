@@ -26,6 +26,7 @@ import DailyTasks from "./pages/DailyTasks";
 import WeeklySchedule from "./pages/WeeklySchedule";
 import Analytics from "./pages/Analytics";
 import WritingAnalytics from "./pages/WritingAnalytics";
+import BookshelfPage from "./pages/WritingPage";
 import CharacterLab from "./pages/CharacterLab";
 import CharacterRelationships from "./pages/CharacterRelationships";
 import KnowledgeBase from "./pages/KnowledgeBase";
@@ -102,6 +103,7 @@ const App = () => {
                     <Route path="/daily-tasks" element={<DailyTasks />} />
                     <Route path="/weekly-schedule" element={<WeeklySchedule />} />
                     <Route path="/analytics" element={<Analytics />} />
+                    <Route path="/writing" element={<BookshelfPage />} />
                     <Route path="/writing-analytics" element={<WritingAnalytics />} />
                     <Route path="/knowledge-base" element={<KnowledgeBase />} />
                     <Route path="/character-lab/*" element={<CharacterLab />} />

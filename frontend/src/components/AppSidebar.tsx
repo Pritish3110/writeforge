@@ -3,7 +3,7 @@ import { useState } from "react";
 import {
   LayoutDashboard, CalendarCheck, CalendarDays, BarChart3,
   FlaskConical, Settings, Moon, Sun, BookOpen, Rocket, Wrench,
-  Activity, BrainCircuit, GitFork, Map, Sparkles, LogOut, ShieldCheck,
+  Activity, BrainCircuit, GitFork, Map, Sparkles, LogOut, ShieldCheck, PenSquare,
 } from "lucide-react";
 import { BrandMark } from "@/components/brand/BrandMark";
 import { NavLink } from "@/components/NavLink";
@@ -44,6 +44,7 @@ const items = [
   { title: "Daily Tasks", url: "/daily-tasks", icon: CalendarCheck },
   { title: "Weekly Schedule", url: "/weekly-schedule", icon: CalendarDays },
   { title: "Analytics", url: "/analytics", icon: BarChart3 },
+  { title: "Bookshelf", url: "/writing", icon: PenSquare },
   { title: "Writing Analytics", url: "/writing-analytics", icon: Activity },
   { title: "Knowledge Base", url: "/knowledge-base", icon: BookOpen },
   { title: "Character Lab", url: "/character-lab", icon: FlaskConical },
