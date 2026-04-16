@@ -26,6 +26,7 @@ backend/
 │   └── aiRoutes.js
 ├── firebase/
 │   ├── firestore.rules
+│   ├── storage.rules
 │   └── firestore.indexes.json
 ├── database/
 ├── scripts/
@@ -86,3 +87,4 @@ Firebase remains in use for:
 
 - Auth verification
 - Firestore rules and data access
+- Storage rules for book-cover uploads

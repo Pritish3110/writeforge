@@ -26,7 +26,11 @@ import { Textarea } from "@/components/ui/textarea";
 import { useAuth } from "@/contexts/AuthContext";
 import { useLocalStorage } from "@/hooks/useLocalStorage";
 import { STORAGE_KEYS } from "@/lib/storageKeys";
-import { deleteBookCover, uploadBookCover } from "@/services/bookCoverStorage";
+import {
+  deleteBookCover,
+  getBookCoverUploadErrorMessage,
+  uploadBookCover,
+} from "@/services/bookCoverStorage";
 import { cn } from "@/lib/utils";
 
 const getAuthorName = (value: string | null | undefined) => value?.trim() || "User";
@@ -336,7 +340,7 @@ const BookshelfPage = () => {
     } catch (error) {
       console.error("Unable to upload the cover image.", error);
       toast.error("Cover upload failed", {
-        description: "Please try again with the same image or a different one.",
+        description: getBookCoverUploadErrorMessage(error),
       });
     } finally {
       setIsCoverUploading(false);
