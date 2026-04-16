@@ -22,6 +22,7 @@ import { isValidEmail } from "@/lib/identity";
 import { cn } from "@/lib/utils";
 
 type AuthMode = "login" | "signup";
+type ActiveAction = AuthMode | "google" | "reset-password" | null;
 
 interface FieldErrors {
   confirmPassword?: string | null;
@@ -52,6 +53,32 @@ const authFieldInputClassName =
 
 const authPrimaryButtonClassName =
   "shadow-[0_18px_40px_-30px_rgba(255,255,255,0.14)] hover:-translate-y-0.5 hover:brightness-[1.03]";
+
+const GoogleMark = ({ className }: { className?: string }) => (
+  <svg
+    viewBox="0 0 24 24"
+    aria-hidden="true"
+    className={className}
+    fill="none"
+  >
+    <path
+      fill="#4285F4"
+      d="M21.6 12.23c0-.7-.06-1.37-.18-2.01H12v3.8h5.39a4.6 4.6 0 0 1-2 3.02v2.51h3.23c1.89-1.74 2.98-4.31 2.98-7.32Z"
+    />
+    <path
+      fill="#34A853"
+      d="M12 22c2.7 0 4.97-.9 6.63-2.45l-3.23-2.5c-.9.6-2.04.96-3.4.96-2.62 0-4.84-1.78-5.64-4.17H3.02v2.58A10 10 0 0 0 12 22Z"
+    />
+    <path
+      fill="#FBBC04"
+      d="M6.36 13.84A5.98 5.98 0 0 1 6.05 12c0-.64.11-1.26.3-1.84V7.58H3.02A10 10 0 0 0 2 12c0 1.6.38 3.11 1.02 4.42l3.34-2.58Z"
+    />
+    <path
+      fill="#EA4335"
+      d="M12 5.98c1.47 0 2.79.5 3.83 1.49l2.88-2.88C16.96 2.96 14.7 2 12 2A10 10 0 0 0 3.02 7.58l3.34 2.58C7.16 7.77 9.38 5.98 12 5.98Z"
+    />
+  </svg>
+);
 
 const buildLoginErrors = (email: string, password: string): FieldErrors => ({
   email: !email.trim()
@@ -112,12 +139,30 @@ const getLoadingCopy = (pendingAuthAction: PendingAuthAction) => {
     };
   }
 
+  if (pendingAuthAction === "sign-in-google") {
+    return {
+      description:
+        "We are confirming your Google account and opening the same calm workspace.",
+      eyebrow: "Access",
+      title: "Connecting with Google...",
+    };
+  }
+
   if (pendingAuthAction === "sign-up") {
     return {
       description:
         "We are setting up a fresh writing space you can return to anytime.",
       eyebrow: "Setup",
       title: "Creating your workspace...",
+    };
+  }
+
+  if (pendingAuthAction === "reset-password") {
+    return {
+      description:
+        "We are preparing a secure reset path for your account.",
+      eyebrow: "Security",
+      title: "Sending your reset email...",
     };
   }
 
@@ -226,7 +271,8 @@ export const AuthLoadingState = () => {
 };
 
 const AuthPage = () => {
-  const { pendingAuthAction, signIn, signUp } = useAuth();
+  const { pendingAuthAction, sendPasswordReset, signIn, signInWithGoogle, signUp } =
+    useAuth();
   const navigate = useNavigate();
   const location = useLocation();
   const [mode, setMode] = useState<AuthMode>("login");
@@ -234,6 +280,9 @@ const AuthPage = () => {
     email: "",
     password: "",
   });
+  const [forgotPasswordEmail, setForgotPasswordEmail] = useState("");
+  const [isForgotPasswordOpen, setIsForgotPasswordOpen] = useState(false);
+  const [forgotPasswordTouched, setForgotPasswordTouched] = useState(false);
   const [signupForm, setSignupForm] = useState({
     confirmPassword: "",
     email: "",
@@ -248,7 +297,7 @@ const AuthPage = () => {
     email: false,
     password: false,
   });
-  const [activeAction, setActiveAction] = useState<AuthMode | null>(null);
+  const [activeAction, setActiveAction] = useState<ActiveAction>(null);
 
   const nextRoute = useMemo(() => {
     const candidate =
@@ -275,8 +324,27 @@ const AuthPage = () => {
       ),
     [signupForm.confirmPassword, signupForm.email, signupForm.password],
   );
+  const forgotPasswordError = useMemo(() => {
+    if (!forgotPasswordTouched) {
+      return null;
+    }
+
+    if (!forgotPasswordEmail.trim()) {
+      return "Enter the email linked to your workspace.";
+    }
+
+    if (!isValidEmail(forgotPasswordEmail)) {
+      return "Use a valid email address.";
+    }
+
+    return null;
+  }, [forgotPasswordEmail, forgotPasswordTouched]);
 
   const isLoginPending = activeAction === "login" || pendingAuthAction === "sign-in";
+  const isGooglePending =
+    activeAction === "google" || pendingAuthAction === "sign-in-google";
+  const isResetPending =
+    activeAction === "reset-password" || pendingAuthAction === "reset-password";
   const isSignupPending = activeAction === "signup" || pendingAuthAction === "sign-up";
 
   const handleLoginSubmit = async (event: FormEvent<HTMLFormElement>) => {
@@ -361,6 +429,56 @@ const AuthPage = () => {
     }
   };
 
+  const handleGoogleLogin = async () => {
+    setActiveAction("google");
+
+    try {
+      await signInWithGoogle();
+      toast.success("Welcome in", {
+        description: "Your writing space is opening now.",
+      });
+      navigate(nextRoute, { replace: true });
+    } catch (error) {
+      toast.error("Unable to continue with Google", {
+        description:
+          error instanceof Error
+            ? error.message
+            : "Please try again in a moment.",
+      });
+    } finally {
+      setActiveAction(null);
+    }
+  };
+
+  const handleForgotPassword = async () => {
+    setForgotPasswordTouched(true);
+
+    if (!forgotPasswordEmail.trim() || !isValidEmail(forgotPasswordEmail)) {
+      return;
+    }
+
+    setActiveAction("reset-password");
+
+    try {
+      await sendPasswordReset(forgotPasswordEmail);
+      toast.success("Password reset email sent", {
+        description: "Check your inbox for the secure reset link.",
+      });
+      setForgotPasswordEmail("");
+      setForgotPasswordTouched(false);
+      setIsForgotPasswordOpen(false);
+    } catch (error) {
+      toast.error("Unable to send reset email", {
+        description:
+          error instanceof Error
+            ? error.message
+            : "Please try again in a moment.",
+      });
+    } finally {
+      setActiveAction(null);
+    }
+  };
+
   return (
     <AuthShell>
       <Card className={authPanelClassName}>
@@ -409,6 +527,32 @@ const AuthPage = () => {
             transition={{ duration: 0.18, ease: "easeOut" }}
             className="pt-7"
           >
+            <div className="space-y-3">
+              <Button
+                type="button"
+                variant="outline"
+                disabled={isGooglePending}
+                onClick={() => void handleGoogleLogin()}
+                className="h-11 w-full justify-between rounded-xl px-4"
+              >
+                <span className="flex items-center gap-3">
+                  <GoogleMark className="h-4 w-4" />
+                  {isGooglePending ? "Connecting to Google..." : "Continue with Google"}
+                </span>
+                {isGooglePending ? (
+                  <LoaderCircle className="h-4 w-4 animate-spin" />
+                ) : (
+                  <ArrowRight className="h-4 w-4" />
+                )}
+              </Button>
+
+              <div className="flex items-center gap-3 text-xs uppercase tracking-[0.18em] text-muted-foreground/70">
+                <span className="h-px flex-1 bg-border" />
+                Or use email
+                <span className="h-px flex-1 bg-border" />
+              </div>
+            </div>
+
             {mode === "login" ? (
               <form className="space-y-5" onSubmit={(event) => void handleLoginSubmit(event)}>
                 <AuthField
@@ -466,6 +610,63 @@ const AuthPage = () => {
                 />
 
                 <div className="space-y-3 pt-1">
+                  <div className="flex items-center justify-end">
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setForgotPasswordTouched(false);
+                        setForgotPasswordEmail(loginForm.email);
+                        setIsForgotPasswordOpen((current) => !current);
+                      }}
+                      className="text-xs leading-6 text-muted-foreground transition-colors hover:text-foreground"
+                    >
+                      Forgot Password?
+                    </button>
+                  </div>
+
+                  <AnimatePresence initial={false}>
+                    {isForgotPasswordOpen ? (
+                      <motion.div
+                        initial={{ opacity: 0, height: 0, y: -4 }}
+                        animate={{ opacity: 1, height: "auto", y: 0 }}
+                        exit={{ opacity: 0, height: 0, y: -4 }}
+                        transition={{ duration: 0.18, ease: "easeOut" }}
+                        className="overflow-hidden rounded-[12px] border border-border bg-background/55 px-4 py-4"
+                      >
+                        <div className="space-y-4">
+                          <AuthField
+                            id="forgot-password-email"
+                            type="email"
+                            autoComplete="email"
+                            label="Reset email"
+                            icon={Mail}
+                            placeholder="you@example.com"
+                            value={forgotPasswordEmail}
+                            onChange={(event) => setForgotPasswordEmail(event.target.value)}
+                            onBlur={() => setForgotPasswordTouched(true)}
+                            error={forgotPasswordError}
+                            hint="We will send a secure reset link to this inbox."
+                            inputClassName={authFieldInputClassName}
+                          />
+                          <div className="flex flex-wrap items-center justify-between gap-3">
+                            <p className="text-xs leading-6 text-muted-foreground/88">
+                              The reset link expires automatically for safety.
+                            </p>
+                            <Button
+                              type="button"
+                              variant="outline"
+                              disabled={isResetPending}
+                              onClick={() => void handleForgotPassword()}
+                              className="rounded-xl"
+                            >
+                              {isResetPending ? "Sending..." : "Send reset email"}
+                            </Button>
+                          </div>
+                        </div>
+                      </motion.div>
+                    ) : null}
+                  </AnimatePresence>
+
                   <Button
                     type="submit"
                     disabled={isLoginPending}

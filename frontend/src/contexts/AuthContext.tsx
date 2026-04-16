@@ -12,8 +12,11 @@ import {
   auth,
   deleteCurrentUser,
   observeAuthState,
+  reauthenticateCurrentUser,
   reloadCurrentUser,
   resendCurrentUserVerificationEmail,
+  sendPasswordReset,
+  signInWithGoogle,
   signInWithEmail,
   signOutUser,
   signUpWithEmail,
@@ -39,11 +42,13 @@ import { deleteWorkspace, saveWorkspaceData } from "@/services/snapshotService.j
 export type PendingAuthAction =
   | "session-check"
   | "sign-in"
+  | "sign-in-google"
   | "sign-up"
   | "sign-out"
   | "delete-account"
   | "update-profile"
   | "change-password"
+  | "reset-password"
   | "resend-verification"
   | "sync"
   | "migration"
@@ -57,6 +62,7 @@ export interface AuthUser {
   bio: string;
   emailVerified: boolean;
   provider: "firebase";
+  providers: string[];
   createdAt: string;
   lastSignInAt: string;
   updatedAt: string;
@@ -82,6 +88,11 @@ interface UpdateProfilePayload {
   avatarUrl?: string;
 }
 
+interface ChangePasswordPayload {
+  currentPassword?: string;
+  newPassword: string;
+}
+
 interface AuthContextValue {
   user: AuthUser | null;
   loading: boolean;
@@ -94,11 +105,13 @@ interface AuthContextValue {
   setUser: (user: AuthUser | null) => void;
   refreshUser: () => Promise<AuthUser | null>;
   signIn: (payload: SignInPayload) => Promise<AuthUser>;
+  signInWithGoogle: () => Promise<AuthUser>;
   signUp: (payload: SignUpPayload) => Promise<AuthUser>;
   signOut: () => Promise<void>;
   deleteAccount: () => Promise<void>;
   updateProfile: (payload: UpdateProfilePayload) => Promise<AuthUser>;
-  changePassword: (password: string) => Promise<void>;
+  changePassword: (payload: ChangePasswordPayload) => Promise<void>;
+  sendPasswordReset: (email: string) => Promise<void>;
   resendVerificationEmail: () => Promise<void>;
 }
 
@@ -116,6 +129,9 @@ const AuthContext = createContext<AuthContextValue>({
   signIn: async () => {
     throw new Error("Auth provider is not ready.");
   },
+  signInWithGoogle: async () => {
+    throw new Error("Auth provider is not ready.");
+  },
   signUp: async () => {
     throw new Error("Auth provider is not ready.");
   },
@@ -125,6 +141,7 @@ const AuthContext = createContext<AuthContextValue>({
     throw new Error("Auth provider is not ready.");
   },
   changePassword: async () => {},
+  sendPasswordReset: async () => {},
   resendVerificationEmail: async () => {},
 });
 
@@ -248,6 +265,9 @@ const buildAuthUser = (
     bio,
     emailVerified: firebaseUser.emailVerified,
     provider: "firebase",
+    providers: firebaseUser.providerData
+      .map((entry) => trimToEmpty(entry.providerId || ""))
+      .filter(Boolean),
     createdAt,
     lastSignInAt,
     updatedAt: profile?.updatedAt || lastSignInAt,
@@ -283,6 +303,12 @@ const createAuthError = (error: unknown, fallback: string) => {
       return new Error(
         "We couldn't reach the server. Check your connection and try again.",
       );
+    case "auth/popup-closed-by-user":
+      return new Error("Google sign-in was closed before it finished.");
+    case "auth/cancelled-popup-request":
+      return new Error("Google sign-in was interrupted. Please try again.");
+    case "auth/popup-blocked":
+      return new Error("Your browser blocked the Google sign-in popup.");
     case "auth/requires-recent-login":
       return new Error(
         "For security, please sign in again before changing sensitive account details.",
@@ -387,6 +413,23 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
     } catch (error) {
       console.error("Firebase sign-in failed.", error);
       throw createAuthError(error, "Unable to sign in right now.");
+    } finally {
+      setPendingAuthAction(null);
+    }
+  }, []);
+
+  const handleGoogleSignIn = useCallback(async () => {
+    setPendingAuthAction("sign-in-google");
+
+    try {
+      const credentials = await signInWithGoogle();
+      const profile = syncStoredProfile(credentials.user);
+      const nextUser = buildAuthUser(credentials.user, profile);
+      setUserState(nextUser);
+      return nextUser;
+    } catch (error) {
+      console.error("Firebase Google sign-in failed.", error);
+      throw createAuthError(error, "Unable to continue with Google right now.");
     } finally {
       setPendingAuthAction(null);
     }
@@ -526,7 +569,7 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
   );
 
   const changePassword = useCallback(
-    async (password: string) => {
+    async ({ currentPassword, newPassword }: ChangePasswordPayload) => {
       if (!auth.currentUser) {
         throw new Error("You need to be signed in to change your password.");
       }
@@ -534,7 +577,26 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
       setPendingAuthAction("change-password");
 
       try {
-        await updateCurrentUserPassword(password);
+        try {
+          await updateCurrentUserPassword(newPassword);
+        } catch (error) {
+          const code =
+            typeof error === "object" &&
+            error &&
+            "code" in error &&
+            typeof error.code === "string"
+              ? error.code
+              : "";
+
+          if (code !== "auth/requires-recent-login") {
+            throw error;
+          }
+
+          await reauthenticateCurrentUser({
+            password: currentPassword,
+          });
+          await updateCurrentUserPassword(newPassword);
+        }
       } catch (error) {
         console.error("Firebase password update failed.", error);
         throw createAuthError(error, "Unable to change your password right now.");
@@ -544,6 +606,21 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
     },
     [],
   );
+
+  const handlePasswordReset = useCallback(async (email: string) => {
+    setPendingAuthAction("reset-password");
+
+    try {
+      await sendPasswordReset({
+        email: email.trim().toLowerCase(),
+      });
+    } catch (error) {
+      console.error("Firebase password reset request failed.", error);
+      throw createAuthError(error, "Unable to send a password reset email.");
+    } finally {
+      setPendingAuthAction(null);
+    }
+  }, []);
 
   const resendVerificationEmail = useCallback(async () => {
     if (!auth.currentUser) {
@@ -578,16 +655,20 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
       setUser,
       refreshUser,
       signIn,
+      signInWithGoogle: handleGoogleSignIn,
       signUp,
       signOut,
       deleteAccount,
       updateProfile,
       changePassword,
+      sendPasswordReset: handlePasswordReset,
       resendVerificationEmail,
     }),
     [
       changePassword,
       deleteAccount,
+      handleGoogleSignIn,
+      handlePasswordReset,
       loading,
       pendingAuthAction,
       refreshUser,

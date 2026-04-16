@@ -9,6 +9,9 @@ interface MockFirebaseUser {
   displayName: string;
   photoURL: string;
   emailVerified: boolean;
+  providerData: Array<{
+    providerId: string;
+  }>;
   metadata: {
     creationTime: string;
     lastSignInTime: string;
@@ -33,6 +36,7 @@ const firebaseAuthMock = vi.hoisted(() => {
     displayName: "Iris Vale",
     photoURL: "",
     emailVerified: true,
+    providerData: [{ providerId: "password" }],
     metadata: {
       creationTime: "2026-04-07T00:00:00.000Z",
       lastSignInTime: "2026-04-07T00:00:00.000Z",
@@ -55,11 +59,22 @@ const firebaseAuthMock = vi.hoisted(() => {
     }),
     reloadCurrentUser: vi.fn(async () => auth.currentUser),
     resendCurrentUserVerificationEmail: vi.fn(async () => {}),
+    reauthenticateCurrentUser: vi.fn(async () => {}),
     deleteCurrentUser: vi.fn(async () => {
       auth.currentUser = null;
       state.listener?.(null);
     }),
+    sendPasswordReset: vi.fn(async () => {}),
     signInWithEmail: vi.fn(async () => ({ user: auth.currentUser })),
+    signInWithGoogle: vi.fn(async () => {
+      const user = createUser({
+        email: "google-writer@example.com",
+        providerData: [{ providerId: "google.com" }],
+      });
+      auth.currentUser = user;
+      state.listener?.(user);
+      return { user };
+    }),
     signOutUser: vi.fn(async () => {
       auth.currentUser = null;
       state.listener?.(null);
@@ -82,10 +97,13 @@ vi.mock("@/firebase/auth.js", () => ({
   auth: firebaseAuthMock.auth,
   deleteCurrentUser: firebaseAuthMock.deleteCurrentUser,
   observeAuthState: firebaseAuthMock.observeAuthState,
+  reauthenticateCurrentUser: firebaseAuthMock.reauthenticateCurrentUser,
   reloadCurrentUser: firebaseAuthMock.reloadCurrentUser,
   resendCurrentUserVerificationEmail:
     firebaseAuthMock.resendCurrentUserVerificationEmail,
+  sendPasswordReset: firebaseAuthMock.sendPasswordReset,
   signInWithEmail: firebaseAuthMock.signInWithEmail,
+  signInWithGoogle: firebaseAuthMock.signInWithGoogle,
   signOutUser: firebaseAuthMock.signOutUser,
   signUpWithEmail: firebaseAuthMock.signUpWithEmail,
   updateCurrentUserPassword: firebaseAuthMock.updateCurrentUserPassword,
@@ -98,7 +116,8 @@ vi.mock("@/services/snapshotService.js", () => ({
 }));
 
 const AuthConsumer = () => {
-  const { loading, displayName, email, deleteAccount, signUp, signOut } = useAuth();
+  const { loading, changePassword, displayName, email, deleteAccount, signUp, signOut } =
+    useAuth();
 
   return (
     <div>
@@ -115,6 +134,16 @@ const AuthConsumer = () => {
         }
       >
         Sign Up
+      </button>
+      <button
+        onClick={() =>
+          void changePassword({
+            currentPassword: "Drafting!123",
+            newPassword: "FreshDraft!456",
+          })
+        }
+      >
+        Change Password
       </button>
       <button onClick={() => void signOut()}>Sign Out</button>
       <button onClick={() => void deleteAccount()}>Delete Account</button>
@@ -208,6 +237,44 @@ describe("AuthContext", () => {
 
     expect(snapshotServiceMock.deleteWorkspace).toHaveBeenCalledWith(
       "firebase-user-001",
+    );
+  });
+
+  it("retries password changes after Firebase requests recent login", async () => {
+    firebaseAuthMock.updateCurrentUserPassword
+      .mockRejectedValueOnce({
+        code: "auth/requires-recent-login",
+      })
+      .mockResolvedValueOnce(undefined);
+
+    render(
+      <AuthProvider>
+        <AuthConsumer />
+      </AuthProvider>,
+    );
+
+    await waitFor(() =>
+      expect(screen.getByTestId("loading-state")).toHaveTextContent("ready"),
+    );
+
+    await act(async () => {
+      screen.getByText("Sign Up").click();
+    });
+
+    await waitFor(() =>
+      expect(screen.getByTestId("display-name")).toHaveTextContent("Iris Vale"),
+    );
+
+    await act(async () => {
+      screen.getByText("Change Password").click();
+    });
+
+    expect(firebaseAuthMock.reauthenticateCurrentUser).toHaveBeenCalledWith({
+      password: "Drafting!123",
+    });
+    expect(firebaseAuthMock.updateCurrentUserPassword).toHaveBeenCalledTimes(2);
+    expect(firebaseAuthMock.updateCurrentUserPassword).toHaveBeenLastCalledWith(
+      "FreshDraft!456",
     );
   });
 });

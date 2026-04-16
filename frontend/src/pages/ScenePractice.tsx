@@ -692,7 +692,7 @@ const ScenePractice = () => {
             {worldElementReference.prompt && (
               <div className="rounded-lg border border-border bg-background/40 p-3">
                 <p className="font-mono text-xs uppercase tracking-wider text-neon-pink">Source Prompt</p>
-                <p className="mt-2 text-sm leading-7">{worldElementReference.prompt}</p>
+                <p className="mt-2 whitespace-pre-line text-sm leading-7">{worldElementReference.prompt}</p>
               </div>
             )}
 

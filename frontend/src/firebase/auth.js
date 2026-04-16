@@ -2,11 +2,17 @@ import {
   browserLocalPersistence,
   createUserWithEmailAndPassword,
   deleteUser,
+  EmailAuthProvider,
   getAuth,
+  GoogleAuthProvider,
   onAuthStateChanged,
+  reauthenticateWithCredential,
+  reauthenticateWithPopup,
   reload,
+  sendPasswordResetEmail,
   sendEmailVerification,
   setPersistence,
+  signInWithPopup,
   signInWithEmailAndPassword,
   signOut,
   updatePassword,
@@ -15,6 +21,7 @@ import {
 import { app } from "./config.js";
 
 export const auth = getAuth(app);
+const googleProvider = new GoogleAuthProvider();
 
 const isPersistablePhotoUrl = (value) => /^(https?:\/\/|gs:\/\/)/i.test(value);
 
@@ -33,6 +40,11 @@ export const observeAuthState = (callback) => onAuthStateChanged(auth, callback)
 export const signInWithEmail = async ({ email, password }) => {
   await ensurePersistence();
   return signInWithEmailAndPassword(auth, email.trim(), password);
+};
+
+export const signInWithGoogle = async () => {
+  await ensurePersistence();
+  return signInWithPopup(auth, googleProvider);
 };
 
 export const signUpWithEmail = async ({ email, password, displayName }) => {
@@ -102,6 +114,47 @@ export const updateCurrentUserPassword = async (password) => {
   }
 
   await updatePassword(auth.currentUser, password);
+};
+
+export const sendPasswordReset = async ({ email, actionCodeSettings } = {}) => {
+  const resolvedEmail = email?.trim();
+
+  if (!resolvedEmail) {
+    throw new Error("Enter the email linked to your workspace.");
+  }
+
+  await sendPasswordResetEmail(auth, resolvedEmail, actionCodeSettings);
+};
+
+const getCurrentProviderId = () =>
+  auth.currentUser?.providerData.find((provider) => provider?.providerId)?.providerId ||
+  null;
+
+export const reauthenticateCurrentUser = async ({ password } = {}) => {
+  if (!auth.currentUser) {
+    throw new Error("You need to be signed in to verify your identity.");
+  }
+
+  const providerId = getCurrentProviderId();
+
+  if (providerId === "password") {
+    const email = auth.currentUser.email?.trim();
+
+    if (!email || !password) {
+      throw new Error("Enter your current password to continue.");
+    }
+
+    const credential = EmailAuthProvider.credential(email, password);
+    await reauthenticateWithCredential(auth.currentUser, credential);
+    return;
+  }
+
+  if (providerId === "google.com") {
+    await reauthenticateWithPopup(auth.currentUser, googleProvider);
+    return;
+  }
+
+  throw new Error("This sign-in method is not supported for password changes yet.");
 };
 
 export const resendCurrentUserVerificationEmail = async () => {

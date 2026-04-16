@@ -120,6 +120,7 @@ const SettingsPage = () => {
     displayName: "",
   });
   const [passwordForm, setPasswordForm] = useState({
+    currentPassword: "",
     confirmPassword: "",
     password: "",
   });
@@ -135,6 +136,8 @@ const SettingsPage = () => {
     user?.lastSignInAt || user?.updatedAt || user?.createdAt,
   );
   const isAuthenticated = Boolean(user);
+  const usesPasswordSignIn = user?.providers.includes("password") ?? false;
+  const usesGoogleSignIn = user?.providers.includes("google.com") ?? false;
 
   const passwordError = useMemo(() => {
     if (!passwordForm.password) return "Enter a new password.";
@@ -144,7 +147,10 @@ const SettingsPage = () => {
     }
 
     return null;
-  }, [passwordForm.confirmPassword, passwordForm.password]);
+  }, [
+    passwordForm.confirmPassword,
+    passwordForm.password,
+  ]);
 
   const syncStatusLabel = !enabled
     ? "Saved on this device"
@@ -335,11 +341,15 @@ const SettingsPage = () => {
     }
 
     try {
-      await changePassword(passwordForm.password);
+      await changePassword({
+        currentPassword: passwordForm.currentPassword,
+        newPassword: passwordForm.password,
+      });
       toast.success("Password updated", {
         description: "Your account credentials were refreshed successfully.",
       });
       setPasswordForm({
+        currentPassword: "",
         confirmPassword: "",
         password: "",
       });
@@ -586,9 +596,25 @@ const SettingsPage = () => {
             />
             <DetailRow
               label="Password"
-              description="Update your password whenever you want a little more peace of mind."
+              description={
+                usesPasswordSignIn
+                  ? "Update your password whenever you want a little more peace of mind."
+                  : usesGoogleSignIn
+                    ? "This account currently signs in with Google, so password changes are managed through Google."
+                    : "Password changes are available for email sign-in accounts."
+              }
+              value={
+                usesGoogleSignIn && !usesPasswordSignIn ? (
+                  <Badge
+                    variant="outline"
+                    className="border-border bg-transparent text-muted-foreground"
+                  >
+                    Google sign-in
+                  </Badge>
+                ) : undefined
+              }
               action={
-                isAuthenticated ? (
+                isAuthenticated && usesPasswordSignIn ? (
                   <Button
                     variant="outline"
                     onClick={() => setIsPasswordDialogOpen(true)}
@@ -851,6 +877,24 @@ const SettingsPage = () => {
               className="mt-6 space-y-4"
               onSubmit={(event) => void handlePasswordSubmit(event)}
             >
+              {usesPasswordSignIn ? (
+                <AuthField
+                  id="current-password"
+                  label="Current password"
+                  type="password"
+                  icon={ShieldCheck}
+                  placeholder="Enter your current password"
+                  value={passwordForm.currentPassword}
+                  onChange={(event) =>
+                    setPasswordForm((current) => ({
+                      ...current,
+                      currentPassword: event.target.value,
+                    }))
+                  }
+                  hint="Usually not needed right away, but Firebase may ask to confirm your identity before saving."
+                />
+              ) : null}
+
               <AuthField
                 id="new-password"
                 label="New password"
@@ -908,7 +952,14 @@ const SettingsPage = () => {
                 <Button
                   type="button"
                   variant="outline"
-                  onClick={() => setIsPasswordDialogOpen(false)}
+                  onClick={() => {
+                    setIsPasswordDialogOpen(false);
+                    setPasswordForm({
+                      currentPassword: "",
+                      confirmPassword: "",
+                      password: "",
+                    });
+                  }}
                 >
                   Cancel
                 </Button>

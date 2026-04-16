@@ -46,12 +46,22 @@ Create `backend/.env`:
 
 ```env
 PORT=8787
-FRONTEND_URL=http://localhost:5173
+FRONTEND_URL=http://localhost:5173,https://writer-z.vercel.app
 GEMINI_API_KEY=your_gemini_api_key
 FIREBASE_SERVICE_ACCOUNT={"type":"service_account","project_id":"your-project-id"}
 ```
 
 Use a comma-separated `FRONTEND_URL` value if more than one trusted frontend origin needs access.
+
+## Environment Variables
+
+- `PORT`: local-only backend port. Render injects this automatically in production.
+- `FRONTEND_URL`: trusted frontend origins for CORS. For this project use `https://writer-z.vercel.app` and keep localhost for development.
+- `GEMINI_API_KEY`: server-side Gemini key from Google AI Studio.
+  Open https://aistudio.google.com/app/apikey, create a key, then store it only in Render or local `.env`.
+- `FIREBASE_SERVICE_ACCOUNT`: Firebase Admin JSON.
+  Open Firebase Console -> Project settings -> Service accounts -> Generate new private key.
+  Paste the full JSON into Render as one env var value.
 
 ## Run
 
@@ -65,7 +75,7 @@ npm run dev
 - Use `npm start`
 - Do not manually set `PORT` on Render unless needed for a special case
 - Add `FRONTEND_URL`, `GEMINI_API_KEY`, and Firebase service account credentials in environment variables
-- Set `FRONTEND_URL` to your deployed Vercel domain, for example `https://your-app.vercel.app`
+- Set `FRONTEND_URL` to `https://writer-z.vercel.app`
 - UptimeRobot can ping `/health`
 
 ## Firebase Scope

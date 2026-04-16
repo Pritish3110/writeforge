@@ -34,6 +34,8 @@ export interface WorldElementRecord {
   createdAt: string;
   updatedAt: string;
   prompt?: string;
+  description?: string;
+  tags?: string[];
   breakdown?: WorldElementBreakdown;
 }
 
@@ -67,6 +69,11 @@ const toLineText = (value: unknown): string => {
 
   return "";
 };
+
+const toTagList = (value: unknown): string[] =>
+  Array.isArray(value)
+    ? value.map((item) => toText(item).trim().toLowerCase()).filter(Boolean)
+    : [];
 
 const toTitleCase = (value: string) => {
   const words = value.trim().toLowerCase().split(/\s+/).filter(Boolean);
@@ -168,6 +175,8 @@ export const normalizeWorldElementRecord = (value: unknown, index: number): Worl
     createdAt,
     updatedAt,
     prompt: toText(record.prompt),
+    description: toText(record.description),
+    tags: toTagList(record.tags),
     breakdown: normalizeBreakdown(record.breakdown),
   };
 };
@@ -280,6 +289,8 @@ export const buildWorldElementRecord = ({
   createdAt,
   updatedAt,
   prompt: generatedPrompt?.prompt,
+  description: generatedPrompt?.description,
+  tags: generatedPrompt?.tags || [],
   breakdown: generatedPrompt
     ? {
         core: generatedPrompt.core,

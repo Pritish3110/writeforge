@@ -325,12 +325,14 @@ const WorldElementDesigner = ({ showIntro = true }: { showIntro?: boolean }) => 
         ? {
             prompt: record.prompt || "",
             title: record.title,
+            description: record.description || "",
             category: record.category,
             element: record.element,
             core: record.breakdown?.core || "",
             mechanic: record.breakdown?.mechanic || "",
             impact: record.breakdown?.impact || "",
             consequence: record.breakdown?.consequence || "",
+            tags: record.tags || [],
             recycledPool: false,
             usedCount: 0,
           }
@@ -535,20 +537,18 @@ const WorldElementDesigner = ({ showIntro = true }: { showIntro?: boolean }) => 
             <Badge variant="outline" className="font-mono text-[10px] uppercase tracking-[0.18em] border-neon-cyan/30 bg-neon-cyan/10 text-neon-cyan">
               {formatWorldElementLabel(generatedPrompt.element)}
             </Badge>
-            <Badge variant="secondary" className="font-mono text-[10px] uppercase tracking-[0.18em]">
-              {generatedPrompt.core}
-            </Badge>
-            <Badge variant="secondary" className="font-mono text-[10px] uppercase tracking-[0.18em]">
-              {generatedPrompt.mechanic}
-            </Badge>
-            <Badge variant="secondary" className="font-mono text-[10px] uppercase tracking-[0.18em]">
-              {generatedPrompt.impact}
-            </Badge>
-            <Badge variant="secondary" className="font-mono text-[10px] uppercase tracking-[0.18em]">
-              {generatedPrompt.consequence}
-            </Badge>
+            {generatedPrompt.tags.map((tag) => (
+              <Badge key={tag} variant="secondary" className="font-mono text-[10px] uppercase tracking-[0.18em]">
+                {tag}
+              </Badge>
+            ))}
           </div>
-          <p className="mt-3 text-sm leading-7">{generatedPrompt.prompt}</p>
+          <div className="mt-3 rounded-lg border border-border/70 bg-background/30 p-3">
+            <p className="font-mono text-[11px] uppercase tracking-[0.18em] text-muted-foreground">Description</p>
+            <p className="mt-2 text-sm leading-7 text-muted-foreground">
+              {generatedPrompt.description || generatedPrompt.prompt}
+            </p>
+          </div>
           <div className="mt-4 grid grid-cols-1 gap-3 md:grid-cols-2">
             <div className="rounded-lg border border-border/70 bg-background/40 p-3">
               <p className="font-mono text-[11px] uppercase tracking-[0.18em] text-neon-cyan">Core</p>
@@ -701,7 +701,7 @@ const WorldElementDesigner = ({ showIntro = true }: { showIntro?: boolean }) => 
                             {record.prompt && (
                               <div className="mb-3 rounded-lg border border-border bg-muted/20 p-3">
                                 <p className="font-mono text-xs uppercase tracking-wider text-neon-pink">Generated Prompt</p>
-                                <p className="mt-2 text-sm leading-7">{record.prompt}</p>
+                                <p className="mt-2 whitespace-pre-line text-sm leading-7">{record.prompt}</p>
                               </div>
                             )}
 

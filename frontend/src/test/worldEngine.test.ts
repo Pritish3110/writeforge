@@ -1,5 +1,6 @@
-import { describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 import {
+  formatWorldElementLabel,
   WORLD_ELEMENT_OPTIONS,
   WORLD_ELEMENT_PROMPT_BANKS,
   WORLD_TEMPLATES,
@@ -13,6 +14,10 @@ import {
 } from "@/lib/worldElements";
 
 describe("worldEngine", () => {
+  afterEach(() => {
+    vi.restoreAllMocks();
+  });
+
   it("exposes expanded element options for each world category", () => {
     expect(WORLD_ELEMENT_OPTIONS.physical).toEqual(
       expect.arrayContaining(["rivers", "caves", "biomes"]),
@@ -54,13 +59,34 @@ describe("worldEngine", () => {
     expect(result.category).toBe("magic");
     expect(WORLD_ELEMENT_OPTIONS.magic).toContain(result.element);
     expect(result.prompt).not.toContain("{");
-    expect(result.prompt.toLowerCase()).toContain("magic");
-    expect(result.prompt.toLowerCase()).toContain(result.element);
+    expect(result.prompt).not.toContain("Rules:");
+    expect(result.prompt).not.toContain("Use simple and clear language");
+    expect(result.description.trim().length).toBeGreaterThan(0);
+    expect(result.prompt).toContain(result.title);
+    expect(result.prompt).toContain(result.description);
+    expect(result.prompt).toContain("- Core:");
+    expect(result.prompt).toContain("- Mechanic:");
+    expect(result.prompt).toContain("- Impact:");
+    expect(result.prompt).toContain("- Consequence:");
+    expect(result.prompt).toContain("Tags:");
+    expect(result.prompt).toContain(" · ");
     expect(result.title.trim().length).toBeGreaterThan(0);
+    expect(result.title.startsWith(formatWorldElementLabel(result.element))).toBe(true);
     expect(result.core.trim().length).toBeGreaterThan(0);
     expect(result.mechanic.trim().length).toBeGreaterThan(0);
     expect(result.impact.trim().length).toBeGreaterThan(0);
     expect(result.consequence.trim().length).toBeGreaterThan(0);
+    [result.core, result.mechanic, result.impact, result.consequence].forEach((point) => {
+      expect(point).toMatch(/^[A-Z]/);
+      expect(point).toMatch(/[.]$/);
+      expect(point.split(/\s+/).length).toBeLessThanOrEqual(15);
+    });
+    expect(result.tags.length).toBeGreaterThanOrEqual(6);
+    expect(result.tags.length).toBeLessThanOrEqual(8);
+    result.tags.forEach((tag) => {
+      expect(tag.split(/\s+/).length).toBeLessThanOrEqual(2);
+      expect(tag).not.toMatch(/[.,;:!?]/);
+    });
   });
 
   it("honors the currently selected element when generating a prompt", () => {
@@ -73,10 +99,44 @@ describe("worldEngine", () => {
     expect(result.category).toBe("magic");
     expect(result.element).toBe("teleportation");
     expect(result.prompt.toLowerCase()).toContain("teleportation");
-    expect(promptBank.cores).toContain(result.core);
-    expect(promptBank.mechanics).toContain(result.mechanic);
-    expect(promptBank.impacts).toContain(result.impact);
-    expect(promptBank.consequences).toContain(result.consequence);
+    expect(result.description.toLowerCase()).toContain("teleportation");
+    expect(promptBank.cores.some((entry) => result.description.toLowerCase().includes(entry.toLowerCase()))).toBe(true);
+    expect(result.core.split(/\s+/).length).toBeLessThanOrEqual(15);
+    expect(result.mechanic.split(/\s+/).length).toBeLessThanOrEqual(15);
+    expect(result.impact.split(/\s+/).length).toBeLessThanOrEqual(15);
+    expect(result.consequence.split(/\s+/).length).toBeLessThanOrEqual(15);
+  });
+
+  it("changes wording when different predefined templates are selected", () => {
+    const randomSpy = vi.spyOn(Math, "random");
+    randomSpy
+      .mockReturnValueOnce(0.01)
+      .mockReturnValueOnce(0.01)
+      .mockReturnValueOnce(0.01)
+      .mockReturnValueOnce(0.01)
+      .mockReturnValueOnce(0.01);
+
+    const first = generateWorldElementPrompt({
+      category: "magic",
+      element: "teleportation",
+    });
+
+    randomSpy.mockReset();
+    randomSpy
+      .mockReturnValueOnce(0.34)
+      .mockReturnValueOnce(0.01)
+      .mockReturnValueOnce(0.01)
+      .mockReturnValueOnce(0.01)
+      .mockReturnValueOnce(0.01);
+
+    const second = generateWorldElementPrompt({
+      category: "magic",
+      element: "teleportation",
+    });
+
+    expect(first.description).not.toBe(second.description);
+    expect(first.core).not.toBe(second.core);
+    expect(first.mechanic).not.toBe(second.mechanic);
   });
 
   it("returns an element that belongs to the selected category", () => {
@@ -94,8 +154,64 @@ describe("worldEngine", () => {
 
     expect(result.category).toBe("custom");
     expect(result.element).toBe("sentient weather archives");
-    expect(result.prompt.toLowerCase()).toContain("sentient weather archives");
+    expect(result.description.toLowerCase()).toContain("sentient weather archives");
     expect(result.title.trim().length).toBeGreaterThan(0);
+    expect(result.tags.length).toBeGreaterThanOrEqual(6);
+  });
+
+  it("interprets infrastructure-like custom input before generating the prompt", () => {
+    const result = generateWorldElementPrompt({
+      category: "custom",
+      element: "laundry system",
+    });
+
+    expect(result.category).toBe("custom");
+    expect(result.interpretation).toMatchObject({
+      type: "infrastructure system",
+      domain: "social / physical",
+      function: "cleaning and upkeep",
+    });
+    expect(result.core.trim().length).toBeGreaterThan(0);
+    expect(result.description).toContain("Laundry System");
+    expect(result.description).toContain("infrastructure system");
+    expect(result.prompt).not.toContain("Keep sentences short.");
+    expect(result.core).toMatch(/[.]$/);
+    expect(result.tags).toContain("laundry system");
+  });
+
+  it("interprets social-group custom input instead of falling back to random prompt parts", () => {
+    const result = generateWorldElementPrompt({
+      category: "custom",
+      element: "blind people",
+    });
+
+    expect(result.interpretation).toMatchObject({
+      type: "social group",
+      domain: "cultural / civic",
+      function: "perception and access",
+    });
+    expect(result.mechanic.toLowerCase()).not.toContain("ley-line");
+    expect(result.impact.toLowerCase()).toMatch(/architecture|law|education|social/);
+    expect(result.description.toLowerCase()).toContain("blind people");
+    expect(result.tags).toContain("blind people");
+    expect(new Set(result.tags).size).toBe(result.tags.length);
+  });
+
+  it("anchors common custom concepts in real-world meaning before adapting them", () => {
+    const result = generateWorldElementPrompt({
+      category: "custom",
+      element: "sports",
+    });
+
+    expect(result.interpretation).toMatchObject({
+      type: "cultural system",
+      categoryBias: "cultural",
+      function: "status and competition",
+    });
+    expect(result.description.toLowerCase()).toContain("organized competition");
+    expect(result.description.toLowerCase()).toMatch(/status|identity|social mobility/);
+    expect(result.core.toLowerCase()).toMatch(/competition|contests|athletic/);
+    expect(result.tags).toContain("sports");
   });
 
   it("keeps random world selection on built-in categories", () => {
@@ -130,6 +246,8 @@ describe("worldElements helpers", () => {
     });
 
     expect(record.prompt).toBe(generatedPrompt.prompt);
+    expect(record.description).toBe(generatedPrompt.description);
+    expect(record.tags).toEqual(generatedPrompt.tags);
     expect(record.breakdown).toEqual({
       core: generatedPrompt.core,
       mechanic: generatedPrompt.mechanic,

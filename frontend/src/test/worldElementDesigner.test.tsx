@@ -14,14 +14,17 @@ const { mockGenerateWorldElementPrompt, mockedPrompt } = vi.hoisted(() => ({
   mockGenerateWorldElementPrompt: vi.fn(),
   mockedPrompt: {
     prompt:
-      "Create a magic element where ley-line flow operates via ritual activation, affecting institutional control and resulting in ritual collapse.",
+      "Artifacts: Ley-Line Flow\n\nArtifacts are a magic system that shapes power and control. It is built around ley-line flow, and ritual activation keeps it working. That affects institutional control and can cause ritual collapse when it breaks.\n\n- Core: It centers on ley-line flow.\n- Mechanic: It works through ritual activation.\n- Impact: This shapes institutional control.\n- Consequence: Breakdown causes ritual collapse.\n\nTags: artifacts · ley flow · ritual access · power control · institutional rule · ritual collapse",
     title: "Artifacts: Ley-line Flow",
+    description:
+      "Artifacts are a magic system that shapes power and control. It is built around ley-line flow, and ritual activation keeps it working. That affects institutional control and can cause ritual collapse when it breaks.",
     category: "magic",
     element: "artifacts",
-    core: "ley-line flow",
-    mechanic: "ritual activation",
-    impact: "institutional control",
-    consequence: "ritual collapse",
+    core: "It centers on ley-line flow.",
+    mechanic: "It works through ritual activation.",
+    impact: "This shapes institutional control.",
+    consequence: "Breakdown causes ritual collapse.",
+    tags: ["artifacts", "ley flow", "ritual access", "power control", "institutional rule", "ritual collapse"],
     recycledPool: false,
     usedCount: 1,
   },
@@ -68,6 +71,8 @@ describe("WorldElementDesigner", () => {
     expect(screen.getByPlaceholderText("What are the costs, risks, or consequences?")).toHaveValue(
       mockedPrompt.consequence,
     );
+    expect(screen.getByText("Description")).toBeInTheDocument();
+    expect(screen.getByText(mockedPrompt.description)).toBeInTheDocument();
   });
 
   it("only syncs title, category, and element when prompt sync is locked", async () => {

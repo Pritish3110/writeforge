@@ -41,17 +41,26 @@ const WORLD_TEMPLATE_PATTERNS: Record<WorldCategoryKey, readonly string[]> = {
   physical: [
     "Design the world's {elementLabel} so {core} depends on {mechanic}, reshaping {impact} and creating {consequence}.",
     "Build a physical system around {elementLabel}: {core} is governed by {mechanic}, which changes {impact} and can trigger {consequence}.",
-    "Treat {elementLabel} as an environmental pressure point. Show how {core} runs through {mechanic}, alters {impact}, and risks {consequence}.",
+    "Treat {elementLabel} as an environmental force. Show how {core} runs through {mechanic}, alters {impact}, and risks {consequence}.",
+    "Design {elementLabel} as a lived condition where {core} responds to {mechanic}, steering {impact} and risking {consequence}.",
+    "Build {elementLabel} into daily survival so {core} is maintained by {mechanic}, influencing {impact} and threatening {consequence}.",
+    "Treat {elementLabel} as a material network. Show how {core} connects to {mechanic}, shapes {impact}, and can collapse into {consequence}.",
   ],
   cultural: [
     "Design a cultural framework around {elementLabel}, where {core} is sustained through {mechanic}, reshaping {impact} and inviting {consequence}.",
     "Build the world's {elementLabel} as a lived social system: {core} relies on {mechanic}, influences {impact}, and can create {consequence}.",
-    "Treat {elementLabel} as a cultural pressure line. Show how {core} emerges from {mechanic}, changes {impact}, and risks {consequence}.",
+    "Treat {elementLabel} as a cultural fault line. Show how {core} emerges from {mechanic}, changes {impact}, and risks {consequence}.",
+    "Design {elementLabel} as a public institution where {core} is reinforced by {mechanic}, shaping {impact} and exposing {consequence}.",
+    "Build {elementLabel} into everyday society so {core} is organized through {mechanic}, influencing {impact} and inviting {consequence}.",
+    "Treat {elementLabel} as a social engine. Show how {core} is directed by {mechanic}, shifts {impact}, and can break into {consequence}.",
   ],
   magic: [
     "Design the world's {elementLabel} so {core} is powered by {mechanic}, altering {impact} and causing {consequence}.",
     "Build an arcane system around {elementLabel}: {core} depends on {mechanic}, reshapes {impact}, and can unleash {consequence}.",
-    "Treat {elementLabel} as a magical leverage point. Show how {core} is stabilized through {mechanic}, changes {impact}, and risks {consequence}.",
+    "Treat {elementLabel} as a magical force. Show how {core} is stabilized through {mechanic}, changes {impact}, and risks {consequence}.",
+    "Design {elementLabel} as a source of power where {core} is controlled by {mechanic}, reshaping {impact} and exposing {consequence}.",
+    "Build {elementLabel} into the world's arcane order so {core} is sustained through {mechanic}, affecting {impact} and inviting {consequence}.",
+    "Treat {elementLabel} as a volatile system. Show how {core} channels {mechanic}, transforms {impact}, and can erupt into {consequence}.",
   ],
 };
 
