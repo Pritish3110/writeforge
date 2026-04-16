@@ -8,9 +8,10 @@ import { deleteBookCover, uploadBookCover } from "@/services/bookCoverStorage";
 import BookshelfPage from "@/pages/WritingPage";
 
 vi.mock("@/services/bookCoverStorage", () => ({
-  uploadBookCover: vi.fn(async (_userId: string, bookId: string) => ({
-    coverUrl: `https://example.com/covers/${bookId}.png`,
-    coverStoragePath: `users/firebase-user-001/books/${bookId}/cover.png`,
+  MAX_BOOK_COVER_FILE_BYTES: 2_000_000,
+  uploadBookCover: vi.fn(async () => ({
+    coverUrl: "data:image/png;base64,cover-preview",
+    coverStoragePath: null,
   })),
   deleteBookCover: vi.fn(async () => {}),
 }));
@@ -249,7 +250,7 @@ describe("BookshelfPage", () => {
     );
     await waitFor(() =>
       expect(screen.getByAltText("Untitled Book cover").getAttribute("src")).toContain(
-        "https://example.com/covers/",
+        "data:image/png;base64,cover-preview",
       ),
     );
   });

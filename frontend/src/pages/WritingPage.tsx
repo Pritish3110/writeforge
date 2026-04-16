@@ -29,6 +29,7 @@ import { STORAGE_KEYS } from "@/lib/storageKeys";
 import {
   deleteBookCover,
   getBookCoverUploadErrorMessage,
+  MAX_BOOK_COVER_FILE_BYTES,
   uploadBookCover,
 } from "@/services/bookCoverStorage";
 import { cn } from "@/lib/utils";
@@ -309,9 +310,9 @@ const BookshelfPage = () => {
       return;
     }
 
-    if (!user?.id) {
-      toast.error("Sign in required", {
-        description: "Please sign in again before uploading a cover.",
+    if (file.size > MAX_BOOK_COVER_FILE_BYTES) {
+      toast.error("Cover file too large", {
+        description: "Choose an image under 2 MB so it can stay saved on this device.",
       });
       return;
     }
