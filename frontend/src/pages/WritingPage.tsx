@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState, type ChangeEvent, type DragEvent, type KeyboardEvent } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState, type ChangeEvent, type DragEvent, type KeyboardEvent } from "react";
 import { BookPlus, Download, Loader2, Upload } from "lucide-react";
 import { BookCard } from "@/components/writing/BookCard";
 import {
@@ -24,24 +24,21 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { toast } from "@/components/ui/sonner";
 import { Textarea } from "@/components/ui/textarea";
 import { useAuth } from "@/contexts/AuthContext";
+import { useBackendSync } from "@/contexts/BackendSyncContext";
 import { useLocalStorage } from "@/hooks/useLocalStorage";
 import { STORAGE_KEYS } from "@/lib/storageKeys";
 import {
   deleteBookCover,
   getBookCoverUploadErrorMessage,
+  loadBookCoverUrl,
   MAX_BOOK_COVER_FILE_BYTES,
   uploadBookCover,
 } from "@/services/bookCoverStorage";
+import { validateImageFile } from "@/lib/imageUtils";
 import { cn } from "@/lib/utils";
 
 const getAuthorName = (value: string | null | undefined) => value?.trim() || "User";
 const dialogClassName = "max-w-5xl overflow-hidden border-border bg-card p-0";
-const isBlobUrl = (value: string | null) => Boolean(value?.startsWith("blob:"));
-const revokeBlobUrl = (value: string | null) => {
-  if (isBlobUrl(value) && typeof URL.revokeObjectURL === "function") {
-    URL.revokeObjectURL(value);
-  }
-};
 const sanitizeFileSegment = (value: string) =>
   value
     .trim()
@@ -63,26 +60,9 @@ const sortBooks = (books: Book[]) =>
   });
 
 const mergeBooksWithPersistedState = (
-  currentBooks: Book[],
+  _currentBooks: Book[],
   persistedBooks: Book[],
-) => {
-  const currentBookLookup = new Map(
-    currentBooks.map((book) => [book.id, book]),
-  );
-
-  return persistedBooks.map((book) => {
-    const currentBook = currentBookLookup.get(book.id);
-
-    if (currentBook && isBlobUrl(currentBook.coverUrl) && !book.coverUrl) {
-      return {
-        ...book,
-        coverUrl: currentBook.coverUrl,
-      };
-    }
-
-    return book;
-  });
-};
+) => persistedBooks;
 
 interface BookInfoDraft {
   title: string;
@@ -102,6 +82,7 @@ const emptyBookInfoErrors: BookInfoErrors = {
 
 const BookshelfPage = () => {
   const { displayName, user } = useAuth();
+  const { enabled: isBackendSyncEnabled, syncTargetsNow } = useBackendSync();
   const [storedBooks, setStoredBooks] = useLocalStorage<unknown[]>(
     STORAGE_KEYS.bookshelf,
     [],
@@ -120,14 +101,32 @@ const BookshelfPage = () => {
   );
   const fileInputRef = useRef<HTMLInputElement | null>(null);
   const pendingCoverBookIdRef = useRef<string | null>(null);
-  const booksRef = useRef<Book[]>([]);
+
   const lastPersistedBooksJsonRef = useRef(JSON.stringify(storedBooks));
   const lastHydratedUserIdRef = useRef<string | null>(user?.id || null);
+  const resolvedCoverPathsRef = useRef(new Set<string>());
+  const booksRef = useRef(books);
+
+  const commitBooks = useCallback(
+    (nextBooksOrUpdater: Book[] | ((currentBooks: Book[]) => Book[])) => {
+      const nextBooks =
+        typeof nextBooksOrUpdater === "function"
+          ? nextBooksOrUpdater(booksRef.current)
+          : nextBooksOrUpdater;
+      const serializedBooks = serializeBooks(nextBooks);
+
+      booksRef.current = nextBooks;
+      lastPersistedBooksJsonRef.current = JSON.stringify(serializedBooks);
+      setBooks(nextBooks);
+      setStoredBooks(serializedBooks);
+    },
+    [setStoredBooks],
+  );
 
   const handleAddBook = () => {
     const nextBook = createDefaultBook(getAuthorName(displayName));
 
-    setBooks((current) => [nextBook, ...current]);
+    commitBooks((current) => [nextBook, ...current]);
   };
 
   const orderedBooks = useMemo(() => sortBooks(books), [books]);
@@ -143,9 +142,7 @@ const BookshelfPage = () => {
     ? `delete ${bookPendingDelete.title}`
     : "";
 
-  useEffect(() => {
-    booksRef.current = books;
-  }, [books]);
+
 
   useEffect(() => {
     const persistedBooks = hydrateBooks(storedBooks);
@@ -154,13 +151,16 @@ const BookshelfPage = () => {
 
     if (lastHydratedUserIdRef.current !== (user?.id || null)) {
       lastHydratedUserIdRef.current = user?.id || null;
+      booksRef.current = persistedBooks;
       setBooks(persistedBooks);
       return;
     }
 
-    setBooks((currentBooks) =>
-      mergeBooksWithPersistedState(currentBooks, persistedBooks),
-    );
+    setBooks((currentBooks) => {
+      const nextBooks = mergeBooksWithPersistedState(currentBooks, persistedBooks);
+      booksRef.current = nextBooks;
+      return nextBooks;
+    });
   }, [storedBooks, user?.id]);
 
   useEffect(() => {
@@ -176,12 +176,72 @@ const BookshelfPage = () => {
   }, [books, setStoredBooks]);
 
   useEffect(() => {
-    return () => {
-      booksRef.current.forEach((book) => {
-        revokeBlobUrl(book.coverUrl);
-      });
+    booksRef.current = books;
+  }, [books, commitBooks]);
+
+
+
+  useEffect(() => {
+    const booksToResolve = books.filter(
+      (book) =>
+        book.coverStoragePath &&
+        !book.coverUrl &&
+        !resolvedCoverPathsRef.current.has(book.coverStoragePath),
+    );
+
+    if (booksToResolve.length === 0) {
+      return;
+    }
+
+    let cancelled = false;
+
+    const resolveMissingCovers = async () => {
+      const results = await Promise.all(
+        booksToResolve.map(async (book) => ({
+          id: book.id,
+          coverStoragePath: book.coverStoragePath!,
+          coverUrl: await loadBookCoverUrl(book.coverStoragePath),
+        })),
+      );
+
+      if (cancelled) {
+        return;
+      }
+
+      // Mark paths as resolved only after a successful, non-cancelled load.
+      for (const entry of results) {
+        resolvedCoverPathsRef.current.add(entry.coverStoragePath);
+      }
+
+      const validResults = results.filter(
+        (entry): entry is { id: string; coverStoragePath: string; coverUrl: string } =>
+          entry.coverUrl !== null,
+      );
+
+      if (validResults.length === 0) {
+        return;
+      }
+
+      const coverMap = new Map(
+        validResults.map((entry) => [entry.id, entry.coverUrl]),
+      );
+
+      commitBooks((current) =>
+        current.map((book) => {
+          const resolvedUrl = coverMap.get(book.id);
+          return resolvedUrl && !book.coverUrl
+            ? { ...book, coverUrl: resolvedUrl }
+            : book;
+        }),
+      );
     };
-  }, []);
+
+    void resolveMissingCovers();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [books]);
 
   useEffect(() => {
     if (!bookInfoId || !activeBookInfo) {
@@ -199,7 +259,7 @@ const BookshelfPage = () => {
   }, [bookInfoId, activeBookInfo?.id]);
 
   const updateBook = (bookId: string, updater: (book: Book) => Book) => {
-    setBooks((current) =>
+    commitBooks((current) =>
       current.map((book) => (book.id === bookId ? updater(book) : book)),
     );
   };
@@ -290,10 +350,12 @@ const BookshelfPage = () => {
       return;
     }
 
-    revokeBlobUrl(bookPendingDelete.coverUrl);
+
     void deleteBookCover(bookPendingDelete.coverStoragePath);
 
-    setBooks((current) => current.filter((book) => book.id !== bookPendingDelete.id));
+    commitBooks((current) =>
+      current.filter((book) => book.id !== bookPendingDelete.id),
+    );
     closeDeleteDialog();
   };
 
@@ -303,16 +365,11 @@ const BookshelfPage = () => {
   };
 
   const handleUploadCoverFile = async (bookId: string, file: File) => {
-    if (!file.type.startsWith("image/")) {
-      toast.error("Unsupported cover file", {
-        description: "Choose an image file for your book cover.",
-      });
-      return;
-    }
+    const validationError = validateImageFile(file, MAX_BOOK_COVER_FILE_BYTES);
 
-    if (file.size > MAX_BOOK_COVER_FILE_BYTES) {
-      toast.error("Cover file too large", {
-        description: "Choose an image under 2 MB so it can stay saved on this device.",
+    if (validationError) {
+      toast.error("Invalid cover file", {
+        description: validationError,
       });
       return;
     }
@@ -320,6 +377,13 @@ const BookshelfPage = () => {
     const bookToUpdate = books.find((entry) => entry.id === bookId);
 
     if (!bookToUpdate) {
+      return;
+    }
+
+    if (!user?.id) {
+      toast.error("Sign in required", {
+        description: "Sign in to upload and sync book covers.",
+      });
       return;
     }
 
@@ -335,8 +399,16 @@ const BookshelfPage = () => {
         updatedAt: new Date(),
       }));
 
-      if (bookToUpdate.coverStoragePath) {
-        void deleteBookCover(bookToUpdate.coverStoragePath);
+      if (isBackendSyncEnabled) {
+        try {
+          await syncTargetsNow(["bookshelf"]);
+        } catch (syncError) {
+          console.error("Unable to sync the updated cover to the workspace.", syncError);
+          toast.error("Cover saved locally", {
+            description:
+              "The cover changed here, but cloud sync still needs another try.",
+          });
+        }
       }
     } catch (error) {
       console.error("Unable to upload the cover image.", error);
@@ -370,15 +442,36 @@ const BookshelfPage = () => {
       return;
     }
 
-    updateBook(bookId, (book) => ({
-      ...book,
-      coverUrl: null,
-      coverStoragePath: null,
-      updatedAt: new Date(),
-    }));
+    setIsCoverUploading(true);
 
-    revokeBlobUrl(bookToUpdate.coverUrl);
-    void deleteBookCover(bookToUpdate.coverStoragePath);
+    commitBooks((current) =>
+      current.map((book) =>
+        book.id === bookId
+          ? {
+              ...book,
+              coverUrl: null,
+              coverStoragePath: null,
+              updatedAt: new Date(),
+            }
+          : book,
+      ),
+    );
+
+    try {
+      await deleteBookCover(bookToUpdate.coverStoragePath);
+
+      if (isBackendSyncEnabled) {
+        await syncTargetsNow(["bookshelf"]);
+      }
+    } catch (error) {
+      console.error("Unable to sync the removed cover to the workspace.", error);
+      toast.error("Cover removed locally", {
+        description:
+          "The cover is gone here, but cloud sync still needs another try.",
+      });
+    } finally {
+      setIsCoverUploading(false);
+    }
   };
 
   const handleCoverPanelKeyDown = (

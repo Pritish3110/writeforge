@@ -55,7 +55,7 @@ const parseDate = (value: unknown, fallback = new Date()) => {
 };
 
 const getPersistedCoverUrl = (value: string | null) =>
-  value && !value.startsWith("blob:") ? value : null;
+  value && value.startsWith("https://") ? value : null;
 
 export const createDefaultBook = (author: string): Book => {
   const now = new Date();

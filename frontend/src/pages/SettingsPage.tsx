@@ -1,9 +1,17 @@
-import { type ChangeEvent, type FormEvent, type ReactNode, useMemo, useState } from "react";
+import {
+  type ChangeEvent,
+  type FormEvent,
+  type ReactNode,
+  useEffect,
+  useMemo,
+  useState,
+} from "react";
 import {
   BadgeCheck,
   CloudCog,
   Database,
   KeyRound,
+  Loader2,
   LogOut,
   Moon,
   PenSquare,
@@ -48,6 +56,12 @@ import {
 } from "@/lib/identity";
 import { RESETTABLE_STORAGE_KEYS, STORAGE_KEYS } from "@/lib/storageKeys";
 import { cn } from "@/lib/utils";
+import { validateImageFile } from "@/lib/imageUtils";
+import {
+  deleteProfileAvatar,
+  MAX_PROFILE_AVATAR_FILE_BYTES,
+  uploadProfileAvatar,
+} from "@/services/profileAvatarStorage";
 
 const detailRowClassName =
   "flex flex-col gap-3 border-t border-border py-4 first:border-t-0 first:pt-0 last:pb-0 sm:flex-row sm:items-start sm:justify-between";
@@ -94,6 +108,7 @@ const SettingsPage = () => {
     status,
     lastSyncedAt,
     syncNow,
+    syncTargetsNow,
   } = useBackendSync();
   const {
     user,
@@ -114,6 +129,12 @@ const SettingsPage = () => {
   const [characters] = useLocalStorage<unknown[]>(STORAGE_KEYS.characters, []);
   const [isEditProfileOpen, setIsEditProfileOpen] = useState(false);
   const [isPasswordDialogOpen, setIsPasswordDialogOpen] = useState(false);
+  const [isAvatarUploading, setIsAvatarUploading] = useState(false);
+  const [pendingAvatarFile, setPendingAvatarFile] = useState<File | null>(null);
+  const [pendingAvatarPreviewUrl, setPendingAvatarPreviewUrl] = useState<string | null>(
+    null,
+  );
+  const [isAvatarMarkedForRemoval, setIsAvatarMarkedForRemoval] = useState(false);
   const [profileForm, setProfileForm] = useState({
     avatarUrl: "",
     bio: "",
@@ -130,6 +151,7 @@ const SettingsPage = () => {
   const streak = getStreak();
   const displayName = authDisplayName || "Story Crafter";
   const initials = getUserInitials(displayName, email);
+  const profileAvatarSrc = pendingAvatarPreviewUrl || profileForm.avatarUrl || undefined;
   const absoluteLastSync = formatAbsoluteDateTime(lastSyncedAt);
   const relativeLastSync = formatRelativeTime(lastSyncedAt);
   const lastSeenLabel = formatRelativeTime(
@@ -216,6 +238,16 @@ const SettingsPage = () => {
     setDangerPhraseInput("");
   };
 
+  useEffect(() => {
+    if (!pendingAvatarPreviewUrl || !pendingAvatarPreviewUrl.startsWith("blob:")) {
+      return;
+    }
+
+    return () => {
+      URL.revokeObjectURL(pendingAvatarPreviewUrl);
+    };
+  }, [pendingAvatarPreviewUrl]);
+
   const performWorkspaceReset = () => {
     resetAll();
     RESETTABLE_STORAGE_KEYS.forEach((key) => {
@@ -277,7 +309,22 @@ const SettingsPage = () => {
     }
   };
 
+  const closeProfileEditor = () => {
+    setPendingAvatarFile(null);
+    setPendingAvatarPreviewUrl(null);
+    setIsAvatarMarkedForRemoval(false);
+    setProfileForm({
+      avatarUrl: avatarUrl || "",
+      bio: bio || "",
+      displayName: authDisplayName || "",
+    });
+    setIsEditProfileOpen(false);
+  };
+
   const openProfileEditor = () => {
+    setPendingAvatarFile(null);
+    setPendingAvatarPreviewUrl(null);
+    setIsAvatarMarkedForRemoval(false);
     setProfileForm({
       avatarUrl: avatarUrl || "",
       bio: bio || "",
@@ -286,44 +333,119 @@ const SettingsPage = () => {
     setIsEditProfileOpen(true);
   };
 
-  const handleAvatarUpload = (event: ChangeEvent<HTMLInputElement>) => {
+  const syncProfileSnapshotNow = async (fallbackDescription: string) => {
+    if (!enabled) {
+      return false;
+    }
+
+    try {
+      await syncTargetsNow(["user"]);
+      return false;
+    } catch (syncError) {
+      console.error("Profile saved locally, but workspace sync failed.", syncError);
+      toast.error("Profile saved locally", {
+        description: fallbackDescription,
+      });
+      return true;
+    }
+  };
+
+  const handleAvatarUpload = async (event: ChangeEvent<HTMLInputElement>) => {
     const file = event.target.files?.[0];
+    event.target.value = "";
 
     if (!file) return;
 
-    if (file.size > 250_000) {
-      toast.error("Avatar file too large", {
-        description: "Choose an image under 250 KB for a lightweight profile preview.",
+    const validationError = validateImageFile(file, MAX_PROFILE_AVATAR_FILE_BYTES);
+
+    if (validationError) {
+      toast.error("Invalid avatar file", {
+        description: validationError,
       });
       return;
     }
 
-    const reader = new FileReader();
-    reader.onload = () => {
-      const avatarUrl = reader.result;
+    setPendingAvatarFile(file);
+    setPendingAvatarPreviewUrl(URL.createObjectURL(file));
+    setIsAvatarMarkedForRemoval(false);
+  };
 
-      if (typeof avatarUrl === "string") {
-        setProfileForm((current) => ({
-          ...current,
-          avatarUrl,
-        }));
-      }
-    };
-    reader.readAsDataURL(file);
+  const handleAvatarRemove = () => {
+    if (!profileAvatarSrc) {
+      return;
+    }
+
+    setPendingAvatarFile(null);
+    setPendingAvatarPreviewUrl(null);
+    setIsAvatarMarkedForRemoval(true);
+    setProfileForm((current) => ({
+      ...current,
+      avatarUrl: "",
+    }));
   };
 
   const handleProfileSave = async () => {
-    try {
-      await updateProfile(profileForm);
-      toast.success("Profile updated", {
-        description: "Your workspace identity now reflects the latest details.",
+    if (!user) {
+      toast.error("Not signed in", {
+        description: "Sign in to update your profile.",
       });
-      setIsEditProfileOpen(false);
+      return;
+    }
+
+    let profileSyncFailed = false;
+    const currentAvatarUrl = (avatarUrl || "").trim();
+    let nextAvatarUrl = currentAvatarUrl;
+
+    try {
+      setIsAvatarUploading(Boolean(pendingAvatarFile) || isAvatarMarkedForRemoval);
+
+      if (pendingAvatarFile) {
+        const { avatarUrl: uploadedAvatarUrl } = await uploadProfileAvatar(
+          user.id,
+          pendingAvatarFile,
+        );
+        nextAvatarUrl = uploadedAvatarUrl;
+      } else if (isAvatarMarkedForRemoval) {
+        nextAvatarUrl = "";
+      }
+
+      await updateProfile({
+        displayName: profileForm.displayName,
+        bio: profileForm.bio,
+        avatarUrl: nextAvatarUrl,
+      });
+      profileSyncFailed = await syncProfileSnapshotNow(
+        "Your profile changed here, but cloud sync still needs another try.",
+      );
+
+      if (isAvatarMarkedForRemoval && currentAvatarUrl) {
+        try {
+          await deleteProfileAvatar(user.id);
+        } catch (cleanupError) {
+          console.error("Avatar cleanup failed after profile update.", cleanupError);
+          toast.error("Avatar cleanup incomplete", {
+            description:
+              cleanupError instanceof Error
+                ? cleanupError.message
+                : "Your profile was updated, but the stored avatar file could not be removed yet.",
+          });
+        }
+      }
+
+      toast.success("Profile updated", {
+        description: profileSyncFailed
+          ? "Your latest details are visible here, but cloud sync is still catching up."
+          : "Your workspace identity now reflects the latest details.",
+      });
+      closeProfileEditor();
     } catch (error) {
+      console.error("Unable to save profile.", error);
       toast.error("Unable to save profile", {
         description:
           error instanceof Error ? error.message : "Please try again in a moment.",
       });
+    } finally {
+      setIsAvatarUploading(false);
     }
   };
 
@@ -746,7 +868,17 @@ const SettingsPage = () => {
         </DialogContent>
       </Dialog>
 
-      <Dialog open={isEditProfileOpen} onOpenChange={setIsEditProfileOpen}>
+      <Dialog
+        open={isEditProfileOpen}
+        onOpenChange={(open) => {
+          if (open) {
+            setIsEditProfileOpen(true);
+            return;
+          }
+
+          closeProfileEditor();
+        }}
+      >
         <DialogContent className={dialogClassName}>
           <div className="p-6 sm:p-8">
             <DialogHeader>
@@ -765,7 +897,7 @@ const SettingsPage = () => {
               <div className="flex flex-col gap-5 sm:flex-row sm:items-center">
                 <Avatar className="h-20 w-20 rounded-[1.5rem] border border-border bg-background">
                   <AvatarImage
-                    src={profileForm.avatarUrl || undefined}
+                    src={profileAvatarSrc}
                     alt={profileForm.displayName || displayName}
                   />
                   <AvatarFallback className="rounded-[1.5rem] bg-background text-xl font-semibold text-foreground">
@@ -774,13 +906,35 @@ const SettingsPage = () => {
                 </Avatar>
 
                 <div className="space-y-3">
-                  <Label
-                    htmlFor="avatar-upload"
-                    className="inline-flex cursor-pointer items-center gap-2 rounded-xl border border-border px-4 py-2.5 text-sm font-medium transition-colors hover:bg-accent"
-                  >
-                    <UserRound className="h-4 w-4" />
-                    Upload avatar
-                  </Label>
+                  <div className="flex flex-wrap gap-3">
+                    <Button
+                      asChild
+                      variant="outline"
+                      className={cn(isAvatarUploading && "pointer-events-none opacity-50")}
+                    >
+                      <Label
+                        htmlFor="avatar-upload"
+                        className="cursor-pointer"
+                      >
+                        {isAvatarUploading ? (
+                          <Loader2 className="h-4 w-4 animate-spin" />
+                        ) : (
+                          <UserRound className="h-4 w-4" />
+                        )}
+                        {isAvatarUploading ? "Uploading..." : "Upload avatar"}
+                      </Label>
+                    </Button>
+                    {profileAvatarSrc ? (
+                      <Button
+                        type="button"
+                        variant="outline"
+                        onClick={handleAvatarRemove}
+                        disabled={isAvatarUploading}
+                      >
+                        Remove avatar
+                      </Button>
+                    ) : null}
+                  </div>
                   <Input
                     id="avatar-upload"
                     type="file"
@@ -789,22 +943,8 @@ const SettingsPage = () => {
                     className="hidden"
                   />
                   <p className="text-xs leading-6 text-muted-foreground">
-                    Small PNG, JPG, or WebP under 250 KB. If you skip this, WriterZ falls back to initials.
+                    PNG, JPG, or WebP under 2 MB. Changes are previewed here and saved when you submit this form.
                   </p>
-                  {profileForm.avatarUrl ? (
-                    <button
-                      type="button"
-                      onClick={() =>
-                        setProfileForm((current) => ({
-                          ...current,
-                          avatarUrl: "",
-                        }))
-                      }
-                      className="text-xs text-muted-foreground transition-colors hover:text-foreground"
-                    >
-                      Remove avatar
-                    </button>
-                  ) : null}
                 </div>
               </div>
 
@@ -845,13 +985,13 @@ const SettingsPage = () => {
                 <Button
                   type="button"
                   variant="outline"
-                  onClick={() => setIsEditProfileOpen(false)}
+                  onClick={closeProfileEditor}
                 >
                   Cancel
                 </Button>
                 <Button
                   type="submit"
-                  disabled={pendingAuthAction === "update-profile"}
+                  disabled={pendingAuthAction === "update-profile" || isAvatarUploading}
                 >
                   {pendingAuthAction === "update-profile" ? "Saving..." : "Save profile"}
                 </Button>

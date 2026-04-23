@@ -188,7 +188,7 @@ const buildStoredProfileDraft = (
     photoURL:
       overrides.photoURL !== undefined
         ? trimToEmpty(overrides.photoURL)
-        : storedProfile?.photoURL || trimToEmpty(firebaseUser.photoURL || ""),
+        : storedProfile?.photoURL || "",
     bio:
       overrides.bio !== undefined
         ? overrides.bio.trim()
@@ -251,7 +251,7 @@ const buildAuthUser = (
     profile?.displayName ||
     trimToEmpty(firebaseUser.displayName || "") ||
     getFallbackDisplayName(firebaseUser.email);
-  const avatarUrl = profile?.photoURL || trimToEmpty(firebaseUser.photoURL || "");
+  const avatarUrl = profile?.photoURL || "";
   const bio = profile?.bio || "";
   const createdAt = profile?.createdAt || firebaseUser.metadata.creationTime || now;
   const lastSignInAt =
@@ -533,10 +533,9 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
         const resolvedAvatarUrl =
           avatarUrl !== undefined ? trimToEmpty(avatarUrl) : undefined;
 
-        if (displayName !== undefined || avatarUrl !== undefined) {
+        if (displayName !== undefined) {
           await updateCurrentUserProfile({
             displayName: resolvedDisplayName,
-            avatarUrl: resolvedAvatarUrl,
           });
         }
 

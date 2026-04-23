@@ -46,6 +46,7 @@ interface BackendSyncContextValue {
   status: BackendSyncStatus;
   lastSyncedAt: string | null;
   syncNow: () => Promise<void>;
+  syncTargetsNow: (targets: WorkspaceSyncTarget[]) => Promise<void>;
 }
 
 const BackendSyncContext = createContext<BackendSyncContextValue>({
@@ -53,6 +54,7 @@ const BackendSyncContext = createContext<BackendSyncContextValue>({
   status: "disabled",
   lastSyncedAt: null,
   syncNow: async () => {},
+  syncTargetsNow: async () => {},
 });
 
 const SYNC_DEBOUNCE_MS = 3000;
@@ -226,6 +228,11 @@ export const BackendSyncProvider = ({ children }: { children: ReactNode }) => {
     [syncTargets],
   );
 
+  const syncTargetsNow = useCallback(
+    async (targets: WorkspaceSyncTarget[]) => syncTargets(targets),
+    [syncTargets],
+  );
+
   const scheduleSync = useCallback(
     (
       targets: Iterable<WorkspaceSyncTarget> = ALL_WORKSPACE_SYNC_TARGETS,
@@ -344,8 +351,9 @@ export const BackendSyncProvider = ({ children }: { children: ReactNode }) => {
       status,
       lastSyncedAt,
       syncNow,
+      syncTargetsNow,
     }),
-    [enabled, lastSyncedAt, status, syncNow],
+    [enabled, lastSyncedAt, status, syncNow, syncTargetsNow],
   );
 
   if (!bootResolved) {

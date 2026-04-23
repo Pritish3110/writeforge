@@ -11,7 +11,6 @@ interface BookCardProps {
   onDownloadPdf: (bookId: string) => void;
   onOpenInfo: (bookId: string) => void;
   onTogglePin: (bookId: string) => void;
-  onUpdateCover: (bookId: string) => void;
 }
 
 export function BookCard({
@@ -21,7 +20,6 @@ export function BookCard({
   onDownloadPdf,
   onOpenInfo,
   onTogglePin,
-  onUpdateCover,
 }: BookCardProps) {
   return (
     <Card className="overflow-hidden p-0">
@@ -53,7 +51,6 @@ export function BookCard({
           onDownloadPdf={onDownloadPdf}
           onOpenInfo={onOpenInfo}
           onTogglePin={onTogglePin}
-          onUpdateCover={onUpdateCover}
         />
       </div>
 

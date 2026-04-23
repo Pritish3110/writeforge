@@ -112,14 +112,15 @@ describe("firebase auth helpers", () => {
     consoleErrorSpy.mockRestore();
   });
 
-  it("does not send data URLs to Firebase profile photoURL", async () => {
+  it("forwards Firebase Storage URLs to Firebase profile photoURL", async () => {
     await updateCurrentUserProfile({
       displayName: "Iris Vale",
-      avatarUrl: "data:image/png;base64,abc123",
+      avatarUrl: "https://firebasestorage.googleapis.com/v0/b/test/o/avatar",
     });
 
     expect(firebaseAuthMock.updateProfile).toHaveBeenCalledWith(auth.currentUser, {
       displayName: "Iris Vale",
+      photoURL: "https://firebasestorage.googleapis.com/v0/b/test/o/avatar",
     });
     expect(firebaseAuthMock.reload).toHaveBeenCalledWith(auth.currentUser);
   });

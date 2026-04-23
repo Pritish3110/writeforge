@@ -1,7 +1,6 @@
 import {
   Download,
   FileText,
-  ImageUp,
   Info,
   MoreHorizontal,
   Pin,
@@ -27,7 +26,6 @@ interface BookCardMenuProps {
   onDownloadPdf: (bookId: string) => void;
   onOpenInfo: (bookId: string) => void;
   onTogglePin: (bookId: string) => void;
-  onUpdateCover: (bookId: string) => void;
 }
 
 export function BookCardMenu({
@@ -37,7 +35,6 @@ export function BookCardMenu({
   onDownloadPdf,
   onOpenInfo,
   onTogglePin,
-  onUpdateCover,
 }: BookCardMenuProps) {
   return (
     <DropdownMenu>
@@ -64,10 +61,7 @@ export function BookCardMenu({
           Book Information
         </DropdownMenuItem>
 
-        <DropdownMenuItem onClick={() => onUpdateCover(book.id)}>
-          <ImageUp className="mr-2 h-4 w-4" />
-          Update Cover
-        </DropdownMenuItem>
+
 
         <DropdownMenuSub>
           <DropdownMenuSubTrigger>

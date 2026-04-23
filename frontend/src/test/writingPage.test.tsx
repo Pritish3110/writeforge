@@ -7,13 +7,23 @@ import { STORAGE_KEYS } from "@/lib/storageKeys";
 import { deleteBookCover, uploadBookCover } from "@/services/bookCoverStorage";
 import BookshelfPage from "@/pages/WritingPage";
 
+const { syncTargetsNowMock } = vi.hoisted(() => ({
+  syncTargetsNowMock: vi.fn(async () => {}),
+}));
+
 vi.mock("@/services/bookCoverStorage", () => ({
   MAX_BOOK_COVER_FILE_BYTES: 2_000_000,
   uploadBookCover: vi.fn(async () => ({
-    coverUrl: "data:image/png;base64,cover-preview",
-    coverStoragePath: null,
+    coverUrl: "https://firebasestorage.googleapis.com/v0/b/test/o/cover-preview",
+    coverStoragePath: "covers/firebase-user-001/book-1/cover-123",
   })),
   deleteBookCover: vi.fn(async () => {}),
+  loadBookCoverUrl: vi.fn(async () => null),
+  getBookCoverUploadErrorMessage: vi.fn((error: unknown) =>
+    error instanceof Error && error.message.trim()
+      ? error.message
+      : "Please try again with a different image on this device.",
+  ),
 }));
 
 vi.mock("@/contexts/AuthContext", () => ({
@@ -23,8 +33,18 @@ vi.mock("@/contexts/AuthContext", () => ({
   }),
 }));
 
+vi.mock("@/contexts/BackendSyncContext", () => ({
+  useBackendSync: () => ({
+    enabled: true,
+    lastSyncedAt: null,
+    status: "ready",
+    syncNow: vi.fn(async () => {}),
+    syncTargetsNow: syncTargetsNowMock,
+  }),
+}));
+
 describe("BookshelfPage", () => {
-  const createObjectURLMock = vi.fn(() => "blob:cover-preview");
+  const createObjectURLMock = vi.fn(() => "https://firebasestorage.googleapis.com/v0/b/test/o/cover-preview");
   const revokeObjectURLMock = vi.fn();
   const originalCreateObjectURL = URL.createObjectURL;
   const originalRevokeObjectURL = URL.revokeObjectURL;
@@ -234,7 +254,8 @@ describe("BookshelfPage", () => {
     addBook();
 
     openBookMenu();
-    fireEvent.click(screen.getByText("Update Cover"));
+    fireEvent.click(screen.getByText("Book Information"));
+    fireEvent.click(screen.getByRole("button", { name: /upload cover for untitled book/i }));
 
     const fileInput = document.querySelector('input[type="file"]') as HTMLInputElement;
     const file = new File(["cover"], "cover.png", { type: "image/png" });
@@ -246,13 +267,14 @@ describe("BookshelfPage", () => {
     });
 
     await waitFor(() =>
-      expect(screen.getByAltText("Untitled Book cover")).toBeInTheDocument(),
+      expect(screen.getAllByAltText("Untitled Book cover").length).toBeGreaterThan(0),
     );
     await waitFor(() =>
-      expect(screen.getByAltText("Untitled Book cover").getAttribute("src")).toContain(
-        "data:image/png;base64,cover-preview",
+      expect(screen.getAllByAltText("Untitled Book cover")[0].getAttribute("src")).toContain(
+        "https://firebasestorage.googleapis.com/v0/b/test/o/cover-preview",
       ),
     );
+    expect(syncTargetsNowMock).toHaveBeenCalledWith(["bookshelf"]);
   });
 
   it("downloads the uploaded cover from the book information modal", async () => {
@@ -260,7 +282,8 @@ describe("BookshelfPage", () => {
     addBook();
 
     openBookMenu();
-    fireEvent.click(screen.getByText("Update Cover"));
+    fireEvent.click(screen.getByText("Book Information"));
+    fireEvent.click(screen.getByRole("button", { name: /upload cover for untitled book/i }));
 
     const fileInput = document.querySelector('input[type="file"]') as HTMLInputElement;
     const file = new File(["cover"], "cover.png", { type: "image/png" });
@@ -272,11 +295,8 @@ describe("BookshelfPage", () => {
     });
 
     await waitFor(() =>
-      expect(screen.getByAltText("Untitled Book cover")).toBeInTheDocument(),
+      expect(screen.getAllByAltText("Untitled Book cover").length).toBeGreaterThan(0),
     );
-
-    openBookMenu();
-    fireEvent.click(screen.getByText("Book Information"));
 
     const anchorClickMock = vi.fn();
     const originalCreateElement = document.createElement.bind(document);
@@ -307,7 +327,8 @@ describe("BookshelfPage", () => {
     addBook();
 
     openBookMenu(0);
-    fireEvent.click(screen.getByText("Update Cover"));
+    fireEvent.click(screen.getByText("Book Information"));
+    fireEvent.click(screen.getByRole("button", { name: /upload cover for untitled book/i }));
 
     const fileInput = document.querySelector('input[type="file"]') as HTMLInputElement;
     const file = new File(["cover"], "cover.png", { type: "image/png" });
@@ -319,7 +340,13 @@ describe("BookshelfPage", () => {
     });
 
     await waitFor(() =>
-      expect(screen.getByAltText("Untitled Book cover")).toBeInTheDocument(),
+      expect(screen.getAllByAltText("Untitled Book cover").length).toBeGreaterThan(0),
+    );
+
+    fireEvent.click(screen.getByRole("button", { name: /cancel/i }));
+
+    await waitFor(() =>
+      expect(screen.queryByLabelText("Book Title")).not.toBeInTheDocument(),
     );
 
     openBookMenu(0);
@@ -396,5 +423,39 @@ describe("BookshelfPage", () => {
       expect(screen.queryAllByAltText("Untitled Book cover")).toHaveLength(0),
     );
     expect(deleteBookCover).toHaveBeenCalled();
+    expect(syncTargetsNowMock).toHaveBeenCalledWith(["bookshelf"]);
+  });
+
+  it("keeps a removed cover gone after a reload", async () => {
+    const firstRender = renderPage();
+    addBook();
+
+    openBookMenu();
+    fireEvent.click(screen.getByText("Book Information"));
+    fireEvent.click(screen.getByRole("button", { name: /upload cover for untitled book/i }));
+
+    const fileInput = document.querySelector('input[type="file"]') as HTMLInputElement;
+    const file = new File(["cover"], "cover.png", { type: "image/png" });
+
+    fireEvent.change(fileInput, {
+      target: {
+        files: [file],
+      },
+    });
+
+    await waitFor(() =>
+      expect(screen.getAllByAltText("Untitled Book cover").length).toBeGreaterThan(0),
+    );
+
+    fireEvent.click(screen.getByRole("button", { name: /remove/i }));
+
+    await waitFor(() =>
+      expect(screen.queryAllByAltText("Untitled Book cover")).toHaveLength(0),
+    );
+
+    firstRender.unmount();
+    renderPage();
+
+    expect(screen.queryAllByAltText("Untitled Book cover")).toHaveLength(0);
   });
 });
