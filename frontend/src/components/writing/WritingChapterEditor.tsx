@@ -18,6 +18,34 @@ interface WritingChapterEditorProps {
   placeholder?: string;
 }
 
+/**
+ * Convert plain text content (from the old Textarea editor) to HTML that
+ * TipTap can understand. If the content already contains HTML tags, return as-is.
+ * Each line becomes its own <p> tag for reliable round-tripping.
+ */
+const normalizeContentForEditor = (content: string): string => {
+  if (!content || !content.trim()) {
+    return "";
+  }
+
+  // If content already has HTML tags, it's from TipTap — use as-is
+  if (/<[a-z][\s\S]*>/i.test(content)) {
+    return content;
+  }
+
+  // Plain text: split by newlines and wrap each line in <p> tags
+  // Empty lines become empty <p></p> (visible blank lines in the editor)
+  const lines = content.split("\n");
+  return lines
+    .map((line) => {
+      const escaped = line
+        .replace(/&/g, "&amp;")
+        .replace(/</g, "&lt;")
+        .replace(/>/g, "&gt;");
+      return `<p>${escaped || ""}</p>`;
+    })
+    .join("");
+};
 
 export const WritingChapterEditor = ({
   value,
@@ -50,42 +78,45 @@ export const WritingChapterEditor = ({
         placeholder,
       }),
     ],
-    content: value || "",
+    content: normalizeContentForEditor(value),
     editorProps: {
       attributes: {
         "data-placeholder": placeholder,
       },
-      // Strip external formatting on paste — behave like a textarea
-      handlePaste: (_view, event) => {
+      // Strip external formatting on paste — preserve newlines as paragraphs
+      handlePaste: (view, event) => {
         const plainText = event.clipboardData?.getData("text/plain") ?? "";
 
         if (!plainText) {
           return false;
         }
 
-        // Let TipTap handle it as plain text insertion
         event.preventDefault();
-        _view.dispatch(
-          _view.state.tr.insertText(plainText).scrollIntoView(),
-        );
-        return true;
-      },
-      // Make Enter insert a hard break (<br>) instead of a new paragraph
-      // This gives single-line spacing like a textarea
-      handleKeyDown: (_view, event) => {
-        if (event.key === "Enter" && !event.shiftKey) {
-          // Insert a hard break (same as Shift+Enter)
-          const { state, dispatch } = _view;
-          const { tr } = state;
-          const hardBreakType = state.schema.nodes.hardBreak;
 
-          if (hardBreakType) {
-            dispatch(tr.replaceSelectionWith(hardBreakType.create()).scrollIntoView());
-            return true;
+        // Convert plain text lines to paragraph nodes
+        const { schema, tr } = view.state;
+        const lines = plainText.split("\n");
+        const nodes: import("@tiptap/pm/model").Node[] = [];
+
+        for (const line of lines) {
+          if (line) {
+            nodes.push(schema.nodes.paragraph.create(null, schema.text(line)));
+          } else {
+            // Empty line = empty paragraph (blank line)
+            nodes.push(schema.nodes.paragraph.create());
           }
         }
-        return false;
+
+        if (nodes.length > 0) {
+          const fragment = schema.nodes.doc.create(null, nodes);
+          const slice = fragment.slice(0, fragment.content.size);
+          view.dispatch(tr.replaceSelection(slice).scrollIntoView());
+        }
+
+        return true;
       },
+      // Enter creates a new <p> paragraph (TipTap default)
+      // p { margin: 0 } gives textarea-like single-line spacing
     },
     onUpdate: ({ editor: currentEditor }) => {
       onChange(currentEditor.getHTML());
@@ -114,7 +145,7 @@ export const WritingChapterEditor = ({
       return;
     }
 
-    editor.commands.setContent(value || "", { emitUpdate: false });
+    editor.commands.setContent(normalizeContentForEditor(value), { emitUpdate: false });
   }, [value, editor]);
 
   return (
@@ -128,11 +159,10 @@ export const WritingChapterEditor = ({
       </div>
 
       <style>{`
-        /* Textarea-like spacing: remove paragraph margins */
+        /* Textarea-like spacing: each <p> is one line, no extra margin */
         .writing-chapter-editor .ProseMirror p {
           margin: 0;
-          min-height: 2rem;
-          white-space: pre-wrap;
+          min-height: 1.5em;
         }
 
         /* Editor text styling matching the original textarea */

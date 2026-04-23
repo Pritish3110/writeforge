@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { ArrowLeft, Plus } from "lucide-react";
 import { useNavigate, useParams } from "react-router-dom";
 import ChapterNavigationControls from "@/components/writing/ChapterNavigationControls";
@@ -8,6 +8,7 @@ import WritingChapterEditor from "@/components/writing/WritingChapterEditor";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { useBookshelf } from "@/hooks/useBookshelf";
+import { useBackendSync } from "@/contexts/BackendSyncContext";
 import {
   createChapterEntries,
   getBookChapterEditRoute,
@@ -17,6 +18,11 @@ import {
 } from "@/lib/writing/bookshelf";
 import { countWords } from "@/lib/writing/editor";
 import { getPlainTextFromRichText } from "@/lib/writing/richText";
+import {
+  readStoredJsonValue,
+  writeStoredJsonValue,
+} from "@/lib/backend/storageAdapter";
+import { STORAGE_KEYS } from "@/lib/storageKeys";
 
 const titleInputClassName =
   "h-14 w-full rounded-none border-0 border-b border-border/40 bg-transparent px-0 text-[17px] font-semibold tracking-[-0.02em] text-foreground placeholder:text-muted-foreground focus-visible:border-foreground/10";
@@ -28,6 +34,7 @@ const WritingChapterEditorPage = () => {
     chapterId: string;
   }>();
   const { addChapter, books, publishChapter, saveChapter } = useBookshelf();
+  const { syncTargetsNow } = useBackendSync();
   const [draftTitle, setDraftTitle] = useState("");
   const [draftContent, setDraftContent] = useState("");
 
@@ -58,9 +65,58 @@ const WritingChapterEditorPage = () => {
 
     setDraftTitle(activeChapterEntry.chapter.title);
     setDraftContent(activeChapterEntry.chapter.content);
+    hasBeenSaved.current = false;
   }, [activeChapterEntry]);
 
+  // Track whether the user has explicitly saved this chapter
+  const hasBeenSaved = useRef(false);
+
+  // Detect if this is a brand-new unsaved chapter (empty title + empty content)
+  const isNewUnsavedChapter = activeChapterEntry
+    ? !activeChapterEntry.chapter.title.trim() && !activeChapterEntry.chapter.content.trim()
+    : false;
+
+  // On unmount: delete new chapters that were never saved
+  useEffect(() => {
+    const currentBookId = bookId;
+    const currentChapterId = chapterId;
+
+    return () => {
+      if (!hasBeenSaved.current && currentBookId && currentChapterId) {
+        // Read the latest bookshelf state from the app's storage adapter
+        const latestBooks: unknown[] = readStoredJsonValue(
+          STORAGE_KEYS.bookshelf,
+          [],
+        );
+
+        const bookIndex = latestBooks.findIndex(
+          (b) => (b as { id: string }).id === currentBookId,
+        );
+        if (bookIndex < 0) return;
+
+        const bookData = latestBooks[bookIndex] as {
+          id: string;
+          chapters?: Array<{ id: string; title?: string; content?: string }>;
+        };
+
+        const chapter = bookData.chapters?.find(
+          (c) => c.id === currentChapterId,
+        );
+
+        // Only delete if the chapter is still empty (never saved with content)
+        if (chapter && !chapter.title?.trim() && !chapter.content?.trim()) {
+          bookData.chapters = bookData.chapters?.filter(
+            (c) => c.id !== currentChapterId,
+          );
+          latestBooks[bookIndex] = bookData;
+          writeStoredJsonValue(STORAGE_KEYS.bookshelf, latestBooks);
+        }
+      }
+    };
+  }, [bookId, chapterId]);
+
   const liveWordCount = useMemo(() => countWords(getPlainTextFromRichText(draftContent)), [draftContent]);
+  const isTitleEmpty = !draftTitle.trim();
   const hasPendingChanges = activeChapterEntry
     ? draftTitle !== activeChapterEntry.chapter.title ||
       draftContent !== activeChapterEntry.chapter.content
@@ -93,25 +149,29 @@ const WritingChapterEditorPage = () => {
   };
 
   const handleSave = () => {
-    if (!book || !activeChapterEntry) {
+    if (!book || !activeChapterEntry || isTitleEmpty) {
       return;
     }
 
+    hasBeenSaved.current = true;
     saveChapter(book.id, activeChapterEntry.chapter.id, {
       title: draftTitle,
       content: draftContent,
     });
+    void syncTargetsNow(["bookshelf"]);
   };
 
   const handlePublish = () => {
-    if (!book || !activeChapterEntry) {
+    if (!book || !activeChapterEntry || isTitleEmpty) {
       return;
     }
 
+    hasBeenSaved.current = true;
     publishChapter(book.id, activeChapterEntry.chapter.id, {
       title: draftTitle,
       content: draftContent,
     });
+    void syncTargetsNow(["bookshelf"]);
   };
 
   const handleAddChapter = () => {
@@ -185,11 +245,11 @@ const WritingChapterEditorPage = () => {
             type="button"
             variant="outline"
             onClick={handlePublish}
-            disabled={isEffectivelyPublished}
+            disabled={isEffectivelyPublished || isTitleEmpty}
           >
             {isEffectivelyPublished ? "Published" : "Publish"}
           </Button>
-          <Button type="button" onClick={handleSave}>
+          <Button type="button" onClick={handleSave} disabled={isTitleEmpty}>
             Save
           </Button>
         </div>
@@ -221,7 +281,7 @@ const WritingChapterEditorPage = () => {
             <Input
               value={draftTitle}
               onChange={(event) => setDraftTitle(event.target.value)}
-              placeholder="Chapter title"
+              placeholder="Title"
               className={titleInputClassName}
             />
           </div>

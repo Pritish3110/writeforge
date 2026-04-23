@@ -2,6 +2,7 @@ import { useMemo, useState } from "react";
 import { ArrowLeft, BookOpenText, Plus, Search, Trash2 } from "lucide-react";
 import { useNavigate, useParams } from "react-router-dom";
 import { useDeleteConfirmation } from "@/components/DeleteConfirmationProvider";
+import { useBackendSync } from "@/contexts/BackendSyncContext";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import {
@@ -50,6 +51,7 @@ const WritingBookEditPage = () => {
     deleteChapter,
     publishAllChapters,
   } = useBookshelf();
+  const { syncTargetsNow } = useBackendSync();
   const [searchQuery, setSearchQuery] = useState("");
   const [sortOption, setSortOption] = useState<ChapterSortOption>("sequence-asc");
   const [deleteAllInput, setDeleteAllInput] = useState("");
@@ -61,7 +63,10 @@ const WritingBookEditPage = () => {
     [bookId, books],
   );
   const chapterEntries = useMemo(
-    () => (book ? createChapterEntries(book) : []),
+    () =>
+      (book ? createChapterEntries(book) : []).filter(
+        (entry) => entry.chapter.title.trim() || entry.chapter.content.trim(),
+      ),
     [book],
   );
   const visibleChapterEntries = useMemo(
@@ -116,6 +121,7 @@ const WritingBookEditPage = () => {
     }
 
     deleteChapter(book.id, chapterId);
+    void syncTargetsNow(["bookshelf"]);
   };
 
   const closeDeleteAllDialog = () => {
@@ -135,6 +141,7 @@ const WritingBookEditPage = () => {
     }
 
     deleteAllChapters(book.id);
+    void syncTargetsNow(["bookshelf"]);
     closeDeleteAllDialog();
   };
 

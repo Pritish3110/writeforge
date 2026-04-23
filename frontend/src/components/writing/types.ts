@@ -82,7 +82,7 @@ export const createDefaultChapter = (chapterNumber: number): Chapter => {
 
   return {
     id: createId("chapter"),
-    title: `Chapter - ${chapterNumber}`,
+    title: "",
     content: "",
     lastPublishedContent: "",
     wordCount: 0,

@@ -92,10 +92,7 @@ const WritingChapterPage = () => {
   }
 
   const readableContent = getReadableChapterContent(activeChapterEntry.chapter);
-  const contentParagraphs = readableContent
-    .split(/\n{2,}/)
-    .map((paragraph) => paragraph.trim())
-    .filter(Boolean);
+  const isHtmlContent = /<[a-z][\s\S]*>/i.test(readableContent);
 
   return (
     <div className="space-y-8">
@@ -132,13 +129,26 @@ const WritingChapterPage = () => {
               </h1>
             </div>
 
-            <div className="space-y-5 text-[15px] leading-8 text-foreground">
-              {contentParagraphs.length > 0 ? (
-                contentParagraphs.map((paragraph, index) => (
-                  <p key={`${activeChapterEntry.chapter.id}-${index}`} className="whitespace-pre-wrap">
-                    {paragraph}
-                  </p>
-                ))
+            <div className="text-[15px] leading-8 text-foreground">
+              {readableContent.trim() ? (
+                isHtmlContent ? (
+                  <div
+                    className="chapter-reading-content [&_p]:mb-0 [&_p]:min-h-[1em] [&_strong]:font-semibold [&_em]:italic [&_u]:underline"
+                    dangerouslySetInnerHTML={{ __html: readableContent }}
+                  />
+                ) : (
+                  <div className="space-y-5">
+                    {readableContent
+                      .split(/\n{2,}/)
+                      .map((paragraph) => paragraph.trim())
+                      .filter(Boolean)
+                      .map((paragraph, index) => (
+                        <p key={`${activeChapterEntry.chapter.id}-${index}`} className="whitespace-pre-wrap">
+                          {paragraph}
+                        </p>
+                      ))}
+                  </div>
+                )
               ) : (
                 <p className="text-muted-foreground">
                   This chapter is not published yet.
