@@ -208,10 +208,7 @@ const WritingChapterEditorPage = () => {
         />
 
         <div className="mx-auto w-full max-w-[1040px]">
-          <div className="flex items-center justify-between gap-3">
-            <p className="text-[12px] font-medium uppercase tracking-[0.14em] text-muted-foreground">
-              Chapter {activeChapterEntry.chapterNumber}
-            </p>
+          <div className="flex items-center justify-end gap-3">
             <Badge
               variant="outline"
               className="border-transparent bg-background/60 text-[11px] shadow-none"

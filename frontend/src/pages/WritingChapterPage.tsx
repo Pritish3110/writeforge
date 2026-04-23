@@ -126,10 +126,7 @@ const WritingChapterPage = () => {
           />
 
           <div className="mx-auto w-full max-w-[1040px] space-y-6">
-            <div className="space-y-2">
-              <p className="text-[12px] font-medium uppercase tracking-[0.14em] text-muted-foreground">
-                Chapter {activeChapterEntry.chapterNumber}
-              </p>
+            <div>
               <h1 className="text-[17px] font-semibold tracking-[-0.02em] text-foreground sm:text-xl">
                 {getChapterDisplayTitle(activeChapterEntry.chapter.title)}
               </h1>
