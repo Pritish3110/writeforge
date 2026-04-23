@@ -4,9 +4,9 @@ import { useNavigate, useParams } from "react-router-dom";
 import ChapterNavigationControls from "@/components/writing/ChapterNavigationControls";
 import WritingScrollToTopButton from "@/components/writing/WritingScrollToTopButton";
 import { Badge } from "@/components/ui/badge";
+import WritingChapterEditor from "@/components/writing/WritingChapterEditor";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { Textarea } from "@/components/ui/textarea";
 import { useBookshelf } from "@/hooks/useBookshelf";
 import {
   createChapterEntries,
@@ -16,11 +16,10 @@ import {
   getChapterTitleOrFallback,
 } from "@/lib/writing/bookshelf";
 import { countWords } from "@/lib/writing/editor";
+import { getPlainTextFromRichText } from "@/lib/writing/richText";
 
 const titleInputClassName =
   "h-14 w-full rounded-none border-0 border-b border-border/40 bg-transparent px-0 text-[17px] font-semibold tracking-[-0.02em] text-foreground placeholder:text-muted-foreground focus-visible:border-foreground/10";
-const contentTextareaClassName =
-  "min-h-[780px] w-full resize-none rounded-[10px] border-0 bg-muted/58 px-5 py-5 text-[15px] leading-8 text-foreground placeholder:text-muted-foreground focus-visible:border-transparent";
 
 const WritingChapterEditorPage = () => {
   const navigate = useNavigate();
@@ -61,7 +60,7 @@ const WritingChapterEditorPage = () => {
     setDraftContent(activeChapterEntry.chapter.content);
   }, [activeChapterEntry]);
 
-  const liveWordCount = useMemo(() => countWords(draftContent), [draftContent]);
+  const liveWordCount = useMemo(() => countWords(getPlainTextFromRichText(draftContent)), [draftContent]);
   const hasPendingChanges = activeChapterEntry
     ? draftTitle !== activeChapterEntry.chapter.title ||
       draftContent !== activeChapterEntry.chapter.content
@@ -231,11 +230,10 @@ const WritingChapterEditorPage = () => {
           </div>
 
           <div className="mt-5">
-            <Textarea
+            <WritingChapterEditor
               value={draftContent}
-              onChange={(event) => setDraftContent(event.target.value)}
+              onChange={setDraftContent}
               placeholder="Start writing..."
-              className={contentTextareaClassName}
             />
           </div>
 
