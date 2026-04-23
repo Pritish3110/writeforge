@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState, type ChangeEvent, type DragEvent, type KeyboardEvent } from "react";
 import { BookPlus, Download, Loader2, Upload } from "lucide-react";
+import { useNavigate } from "react-router-dom";
 import { BookCard } from "@/components/writing/BookCard";
 import {
   createDefaultBook,
@@ -27,6 +28,7 @@ import { useAuth } from "@/contexts/AuthContext";
 import { useBackendSync } from "@/contexts/BackendSyncContext";
 import { useLocalStorage } from "@/hooks/useLocalStorage";
 import { STORAGE_KEYS } from "@/lib/storageKeys";
+import { getBookPreviewRoute } from "@/lib/writing/bookshelf";
 import {
   deleteBookCover,
   getBookCoverUploadErrorMessage,
@@ -68,6 +70,7 @@ interface BookInfoDraft {
   title: string;
   author: string;
   description: string;
+  genre: string;
   coverPreviewUrl: string | null;
   pendingCoverFile: File | null;
 }
@@ -131,6 +134,7 @@ const getCoverDownloadFilename = (
 };
 
 const BookshelfPage = () => {
+  const navigate = useNavigate();
   const { displayName, user } = useAuth();
   const { enabled: isBackendSyncEnabled, syncTargetsNow } = useBackendSync();
   const [storedBooks, setStoredBooks] = useLocalStorage<unknown[]>(
@@ -316,6 +320,7 @@ const BookshelfPage = () => {
       title: activeBookInfo.title,
       author: activeBookInfo.author,
       description: activeBookInfo.description,
+      genre: activeBookInfo.genre,
       coverPreviewUrl: activeBookInfo.coverUrl,
       pendingCoverFile: null,
     });
@@ -423,6 +428,7 @@ const BookshelfPage = () => {
         title: trimmedTitle,
         author: bookInfoDraft.author,
         description: bookInfoDraft.description,
+        genre: bookInfoDraft.genre,
         coverUrl: nextCoverUrl,
         coverStoragePath: nextCoverStoragePath,
         updatedAt: new Date(),
@@ -488,6 +494,14 @@ const BookshelfPage = () => {
   const handleUpdateCoverRequest = (bookId: string) => {
     pendingCoverBookIdRef.current = bookId;
     fileInputRef.current?.click();
+  };
+
+  const handleOpenPreview = (bookId: string) => {
+    const selectedBook = books.find((book) => book.id === bookId);
+
+    navigate(getBookPreviewRoute(bookId), {
+      state: selectedBook ? { book: selectedBook } : undefined,
+    });
   };
 
   const handleUploadCoverFile = async (bookId: string, file: File) => {
@@ -705,8 +719,8 @@ const BookshelfPage = () => {
               onDownloadDocx={handleDownloadDocx}
               onDownloadPdf={handleDownloadPdf}
               onOpenInfo={handleOpenBookInfo}
+              onOpenPreview={handleOpenPreview}
               onTogglePin={handleTogglePin}
-              onUpdateCover={handleUpdateCoverRequest}
             />
           ))}
         </div>
@@ -747,7 +761,7 @@ const BookshelfPage = () => {
                 Book Information
               </DialogTitle>
               <DialogDescription className="mt-2 max-w-2xl leading-7">
-                Shape the cover, title, author line, and story note for this book.
+                Shape the cover, title, author line, genre, and story note for this book.
               </DialogDescription>
             </DialogHeader>
 
@@ -917,6 +931,24 @@ const BookshelfPage = () => {
                     >
                       {bookInfoErrors.author || "Author looks good."}
                     </p>
+                  </div>
+
+                  <div className="space-y-3">
+                    <Label
+                      htmlFor="book-genre"
+                      className="text-[12px] font-medium tracking-[-0.01em] text-muted-foreground"
+                    >
+                      Genre
+                    </Label>
+                    <Input
+                      id="book-genre"
+                      value={bookInfoDraft.genre}
+                      onChange={(event) =>
+                        handleBookInfoChange("genre", event.target.value)
+                      }
+                      placeholder="Fantasy, Romance, Mystery..."
+                      className={inputClassName}
+                    />
                   </div>
 
                   <div className="space-y-3">

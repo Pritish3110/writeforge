@@ -1096,7 +1096,7 @@ const CharacterRelationships = () => {
                     <SelectTrigger>
                       <SelectValue placeholder="Choose a character" />
                     </SelectTrigger>
-                    <SelectContent showScrollButtons={false}>
+                    <SelectContent>
                       {characters.map((character) => (
                         <SelectItem key={character.id} value={character.id}>
                           {character.name}
@@ -1117,7 +1117,7 @@ const CharacterRelationships = () => {
                     <SelectTrigger>
                       <SelectValue placeholder="Choose a character" />
                     </SelectTrigger>
-                    <SelectContent showScrollButtons={false}>
+                    <SelectContent>
                       {characters.map((character) => (
                         <SelectItem key={character.id} value={character.id}>
                           {character.name}

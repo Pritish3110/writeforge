@@ -27,6 +27,10 @@ import WeeklySchedule from "./pages/WeeklySchedule";
 import Analytics from "./pages/Analytics";
 import WritingAnalytics from "./pages/WritingAnalytics";
 import BookshelfPage from "./pages/WritingPage";
+import WritingBookPreviewPage from "./pages/WritingBookPreviewPage";
+import WritingBookEditPage from "./pages/WritingBookEditPage";
+import WritingChapterPage from "./pages/WritingChapterPage";
+import WritingChapterEditorPage from "./pages/WritingChapterEditorPage";
 import CharacterLab from "./pages/CharacterLab";
 import CharacterRelationships from "./pages/CharacterRelationships";
 import KnowledgeBase from "./pages/KnowledgeBase";
@@ -104,6 +108,16 @@ const App = () => {
                     <Route path="/weekly-schedule" element={<WeeklySchedule />} />
                     <Route path="/analytics" element={<Analytics />} />
                     <Route path="/writing" element={<BookshelfPage />} />
+                    <Route path="/writing/:bookId" element={<WritingBookPreviewPage />} />
+                    <Route path="/writing/:bookId/edit" element={<WritingBookEditPage />} />
+                    <Route
+                      path="/writing/:bookId/edit/:chapterId"
+                      element={<WritingChapterEditorPage />}
+                    />
+                    <Route
+                      path="/writing/:bookId/chapter/:chapterId"
+                      element={<WritingChapterPage />}
+                    />
                     <Route path="/writing-analytics" element={<WritingAnalytics />} />
                     <Route path="/knowledge-base" element={<KnowledgeBase />} />
                     <Route path="/character-lab/*" element={<CharacterLab />} />

@@ -10,6 +10,7 @@ import { NavLink } from "@/components/NavLink";
 import { useTheme } from "@/contexts/ThemeContext";
 import { useAuth } from "@/contexts/AuthContext";
 import { toast } from "@/components/ui/sonner";
+import { cn } from "@/lib/utils";
 import {
   Sidebar, SidebarContent, SidebarGroup, SidebarGroupContent,
   SidebarGroupLabel, SidebarMenu, SidebarMenuButton, SidebarMenuItem, useSidebar,
@@ -86,9 +87,13 @@ export function AppSidebar() {
     <Sidebar collapsible="icon" className="border-r border-border">
       <SidebarContent className="flex flex-col justify-between h-full">
         <div>
-          <div className="p-4">
+          <div className={cn("p-4", collapsed && "flex justify-center p-2")}>
             {collapsed ? (
-              <BrandMark showWordmark={false} className="justify-center" />
+              <BrandMark
+                showWordmark={false}
+                className="justify-center"
+                markClassName="h-8 w-8 rounded-md"
+              />
             ) : (
               <BrandMark />
             )}
@@ -109,7 +114,7 @@ export function AppSidebar() {
                         className="transition-colors duration-150 hover:bg-muted/55 hover:text-foreground"
                         activeClassName="bg-secondary text-foreground font-medium"
                       >
-                        <item.icon className="mr-2 h-4 w-4 shrink-0" />
+                        <item.icon className={cn("h-4 w-4 shrink-0", !collapsed && "mr-2")} />
                         {!collapsed && <span>{item.title}</span>}
                       </NavLink>
                     </SidebarMenuButton>
@@ -120,7 +125,7 @@ export function AppSidebar() {
           </SidebarGroup>
         </div>
 
-        <div className="p-4 space-y-3">
+        <div className={cn("space-y-3 p-4", collapsed && "space-y-2 p-2")}>
           {user ? (
             <div className="space-y-2">
               {!collapsed ? (
@@ -144,24 +149,40 @@ export function AppSidebar() {
                 </div>
               ) : null}
 
-              <button
-                onClick={() => void handleSignOut()}
-                className="flex items-center gap-2 w-full rounded-xl px-3 py-2 text-sm text-muted-foreground transition-colors duration-150 hover:bg-muted/55 hover:text-foreground"
-                disabled={isSigningOut}
-              >
-                <LogOut className="h-4 w-4 shrink-0" />
-                {!collapsed && <span>{isSigningOut ? "Signing Out..." : "Sign Out"}</span>}
-              </button>
+              <SidebarMenu className={cn(collapsed && "items-center")}>
+                <SidebarMenuItem>
+                  <SidebarMenuButton
+                    onClick={() => void handleSignOut()}
+                    disabled={isSigningOut}
+                    tooltip={isSigningOut ? "Signing Out..." : "Sign Out"}
+                    className={cn(
+                      "text-muted-foreground hover:bg-muted/55 hover:text-foreground",
+                      collapsed && "justify-center",
+                    )}
+                  >
+                    <LogOut className="h-4 w-4 shrink-0" />
+                    {!collapsed && <span>{isSigningOut ? "Signing Out..." : "Sign Out"}</span>}
+                  </SidebarMenuButton>
+                </SidebarMenuItem>
+              </SidebarMenu>
             </div>
           ) : null}
 
-          <button
-            onClick={toggleTheme}
-            className="flex items-center gap-2 w-full rounded-xl px-3 py-2 text-sm text-muted-foreground transition-colors duration-150 hover:bg-muted/55 hover:text-foreground"
-          >
-            {theme === "dark" ? <Sun className="h-4 w-4 shrink-0" /> : <Moon className="h-4 w-4 shrink-0" />}
-            {!collapsed && <span>{theme === "dark" ? "Light Mode" : "Dark Mode"}</span>}
-          </button>
+          <SidebarMenu className={cn(collapsed && "items-center")}>
+            <SidebarMenuItem>
+              <SidebarMenuButton
+                onClick={toggleTheme}
+                tooltip={theme === "dark" ? "Light Mode" : "Dark Mode"}
+                className={cn(
+                  "text-muted-foreground hover:bg-muted/55 hover:text-foreground",
+                  collapsed && "justify-center",
+                )}
+              >
+                {theme === "dark" ? <Sun className="h-4 w-4 shrink-0" /> : <Moon className="h-4 w-4 shrink-0" />}
+                {!collapsed && <span>{theme === "dark" ? "Light Mode" : "Dark Mode"}</span>}
+              </SidebarMenuButton>
+            </SidebarMenuItem>
+          </SidebarMenu>
         </div>
       </SidebarContent>
     </Sidebar>

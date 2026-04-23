@@ -2,6 +2,7 @@ export interface Chapter {
   id: string;
   title: string;
   content: string;
+  lastPublishedContent: string;
   wordCount: number;
   isPublished: boolean;
   updatedAt: Date;
@@ -12,6 +13,7 @@ export interface Book {
   title: string;
   author: string;
   description: string;
+  genre: string;
   coverUrl: string | null;
   coverStoragePath: string | null;
   pinned: boolean;
@@ -65,12 +67,27 @@ export const createDefaultBook = (author: string): Book => {
     title: "Untitled Book",
     author: author.trim() || "User",
     description: "",
+    genre: "",
     coverUrl: null,
     coverStoragePath: null,
     pinned: false,
     createdAt: now,
     updatedAt: now,
     chapters: [],
+  };
+};
+
+export const createDefaultChapter = (chapterNumber: number): Chapter => {
+  const now = new Date();
+
+  return {
+    id: createId("chapter"),
+    title: `Chapter - ${chapterNumber}`,
+    content: "",
+    lastPublishedContent: "",
+    wordCount: 0,
+    isPublished: false,
+    updatedAt: now,
   };
 };
 
@@ -100,6 +117,7 @@ export const hydrateBook = (value: unknown): Book | null => {
     title: typeof value.title === "string" ? value.title : "Untitled Book",
     author: typeof value.author === "string" ? value.author : "User",
     description: typeof value.description === "string" ? value.description : "",
+    genre: typeof value.genre === "string" ? value.genre : "",
     coverUrl:
       typeof value.coverUrl === "string" && value.coverUrl.trim()
         ? getPersistedCoverUrl(value.coverUrl)
@@ -131,6 +149,13 @@ export const hydrateBook = (value: unknown): Book | null => {
                   : "Untitled Chapter",
               content:
                 typeof chapterValue.content === "string" ? chapterValue.content : "",
+              lastPublishedContent:
+                typeof chapterValue.lastPublishedContent === "string"
+                  ? chapterValue.lastPublishedContent
+                  : Boolean(chapterValue.isPublished) &&
+                      typeof chapterValue.content === "string"
+                    ? chapterValue.content
+                    : "",
               wordCount:
                 typeof chapterValue.wordCount === "number" &&
                 Number.isFinite(chapterValue.wordCount)

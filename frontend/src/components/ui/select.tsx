@@ -1,6 +1,6 @@
 import * as React from "react";
 import * as SelectPrimitive from "@radix-ui/react-select";
-import { Check, ChevronDown, ChevronUp, Search } from "lucide-react";
+import { Check, ChevronDown, Search } from "lucide-react";
 
 import { cn } from "@/lib/utils";
 
@@ -94,40 +94,10 @@ const SelectTrigger = React.forwardRef<
 ));
 SelectTrigger.displayName = SelectPrimitive.Trigger.displayName;
 
-const SelectScrollUpButton = React.forwardRef<
-  React.ElementRef<typeof SelectPrimitive.ScrollUpButton>,
-  React.ComponentPropsWithoutRef<typeof SelectPrimitive.ScrollUpButton>
->(({ className, ...props }, ref) => (
-  <SelectPrimitive.ScrollUpButton
-    ref={ref}
-    className={cn("flex cursor-default items-center justify-center py-1", className)}
-    {...props}
-  >
-    <ChevronUp className="h-4 w-4" />
-  </SelectPrimitive.ScrollUpButton>
-));
-SelectScrollUpButton.displayName = SelectPrimitive.ScrollUpButton.displayName;
-
-const SelectScrollDownButton = React.forwardRef<
-  React.ElementRef<typeof SelectPrimitive.ScrollDownButton>,
-  React.ComponentPropsWithoutRef<typeof SelectPrimitive.ScrollDownButton>
->(({ className, ...props }, ref) => (
-  <SelectPrimitive.ScrollDownButton
-    ref={ref}
-    className={cn("flex cursor-default items-center justify-center py-1", className)}
-    {...props}
-  >
-    <ChevronDown className="h-4 w-4" />
-  </SelectPrimitive.ScrollDownButton>
-));
-SelectScrollDownButton.displayName = SelectPrimitive.ScrollDownButton.displayName;
-
 const SelectContent = React.forwardRef<
   React.ElementRef<typeof SelectPrimitive.Content>,
-  React.ComponentPropsWithoutRef<typeof SelectPrimitive.Content> & {
-    showScrollButtons?: boolean;
-  }
->(({ className, children, position = "popper", showScrollButtons = true, ...props }, ref) => {
+  React.ComponentPropsWithoutRef<typeof SelectPrimitive.Content>
+>(({ className, children, position = "popper", ...props }, ref) => {
   const [searchQuery, setSearchQuery] = React.useState("");
   const itemCount = countSelectItems(children);
   const hasOverflow = itemCount > DROPDOWN_VISIBLE_ITEM_LIMIT;
@@ -165,9 +135,6 @@ const SelectContent = React.forwardRef<
             />
           </div>
         ) : null}
-        {hasOverflow && showScrollButtons ? (
-          <SelectScrollUpButton className="border-b border-border/60 bg-card/95 text-muted-foreground" />
-        ) : null}
         <SelectPrimitive.Viewport
           className={cn(
             "overflow-y-auto p-1 [scrollbar-width:thin]",
@@ -182,9 +149,6 @@ const SelectContent = React.forwardRef<
             <div className="px-3 py-2 text-sm text-muted-foreground">No matching options.</div>
           )}
         </SelectPrimitive.Viewport>
-        {hasOverflow && showScrollButtons ? (
-          <SelectScrollDownButton className="border-t border-border/60 bg-card/95 text-muted-foreground" />
-        ) : null}
       </SelectPrimitive.Content>
     </SelectPrimitive.Portal>
   );
@@ -239,6 +203,4 @@ export {
   SelectLabel,
   SelectItem,
   SelectSeparator,
-  SelectScrollUpButton,
-  SelectScrollDownButton,
 };

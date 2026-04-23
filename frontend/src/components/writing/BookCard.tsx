@@ -10,8 +10,17 @@ interface BookCardProps {
   onDownloadDocx: (bookId: string) => void;
   onDownloadPdf: (bookId: string) => void;
   onOpenInfo: (bookId: string) => void;
+  onOpenPreview: (bookId: string) => void;
   onTogglePin: (bookId: string) => void;
 }
+
+const isInteractiveTarget = (target: EventTarget | null) =>
+  target instanceof HTMLElement &&
+  Boolean(
+    target.closest(
+      "button, a, input, textarea, select, [role='button'], [role='menu'], [role='menuitem']",
+    ),
+  );
 
 export function BookCard({
   book,
@@ -19,10 +28,33 @@ export function BookCard({
   onDownloadDocx,
   onDownloadPdf,
   onOpenInfo,
+  onOpenPreview,
   onTogglePin,
 }: BookCardProps) {
   return (
-    <Card className="overflow-hidden p-0">
+    <Card
+      className="overflow-hidden p-0"
+      role="link"
+      tabIndex={0}
+      aria-label={`Open preview for ${book.title}`}
+      onClick={(event) => {
+        if (isInteractiveTarget(event.target)) {
+          return;
+        }
+
+        onOpenPreview(book.id);
+      }}
+      onKeyDown={(event) => {
+        if (event.target !== event.currentTarget) {
+          return;
+        }
+
+        if (event.key === "Enter" || event.key === " ") {
+          event.preventDefault();
+          onOpenPreview(book.id);
+        }
+      }}
+    >
       <div className="relative aspect-[3/4] border-b border-border bg-muted/35">
         {book.coverUrl ? (
           <img

@@ -1,3 +1,4 @@
+import type { SyntheticEvent } from "react";
 import {
   Download,
   FileText,
@@ -36,6 +37,10 @@ export function BookCardMenu({
   onOpenInfo,
   onTogglePin,
 }: BookCardMenuProps) {
+  const stopCardNavigation = (event: SyntheticEvent) => {
+    event.stopPropagation();
+  };
+
   return (
     <DropdownMenu>
       <DropdownMenuTrigger asChild>
@@ -45,6 +50,9 @@ export function BookCardMenu({
           size="icon"
           aria-label={`Book actions for ${book.title}`}
           className="absolute right-3 top-3 h-9 w-9 rounded-[10px] bg-card/92 text-muted-foreground"
+          onClick={stopCardNavigation}
+          onPointerDown={stopCardNavigation}
+          onKeyDown={stopCardNavigation}
         >
           <MoreHorizontal className="h-4 w-4" />
         </Button>

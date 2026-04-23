@@ -448,7 +448,7 @@ const ScenePractice = () => {
                 <SelectTrigger className="mt-1">
                   <SelectValue />
                 </SelectTrigger>
-                <SelectContent showScrollButtons={false}>
+                <SelectContent>
                   {PROMPT_TONES.map((tone) => (
                     <SelectItem key={tone} value={tone}>
                       {formatToneLabel(tone)}
@@ -464,7 +464,7 @@ const ScenePractice = () => {
                 <SelectTrigger className="mt-1">
                   <SelectValue />
                 </SelectTrigger>
-                <SelectContent showScrollButtons={false}>
+                <SelectContent>
                   <SelectItem value={UNKNOWN_CHARACTER_ID}>Unknown Character</SelectItem>
                   {promptCharacters.map((character) => (
                     <SelectItem key={character.id} value={character.id}>
