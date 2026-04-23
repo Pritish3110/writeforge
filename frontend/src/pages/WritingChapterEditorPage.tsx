@@ -124,6 +124,24 @@ const WritingChapterEditorPage = () => {
   const isEffectivelyPublished =
     Boolean(activeChapterEntry?.chapter.isPublished) && !hasPendingChanges;
 
+  // Auto-save: debounce 3 seconds after any change to title or content
+  useEffect(() => {
+    if (!book || !activeChapterEntry || isTitleEmpty || !hasPendingChanges) {
+      return;
+    }
+
+    const timer = setTimeout(() => {
+      hasBeenSaved.current = true;
+      saveChapter(book.id, activeChapterEntry.chapter.id, {
+        title: draftTitle,
+        content: draftContent,
+      });
+      void syncTargetsNow(["bookshelf"]);
+    }, 3000);
+
+    return () => clearTimeout(timer);
+  }, [draftTitle, draftContent, book, activeChapterEntry, isTitleEmpty, hasPendingChanges, saveChapter, syncTargetsNow]);
+
   const handleSelectChapter = (nextSelectedChapterId: string) => {
     if (!book) {
       return;
