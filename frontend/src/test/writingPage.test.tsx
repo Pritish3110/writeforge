@@ -48,6 +48,12 @@ describe("BookshelfPage", () => {
   const revokeObjectURLMock = vi.fn();
   const originalCreateObjectURL = URL.createObjectURL;
   const originalRevokeObjectURL = URL.revokeObjectURL;
+  const originalFetch = globalThis.fetch;
+  const fetchMock = vi.fn(async () => ({
+    ok: true,
+    status: 200,
+    blob: async () => new Blob(["cover"], { type: "image/png" }),
+  }));
 
   beforeEach(() => {
     resetStorageAdapter();
@@ -60,6 +66,11 @@ describe("BookshelfPage", () => {
       configurable: true,
       writable: true,
       value: revokeObjectURLMock,
+    });
+    Object.defineProperty(globalThis, "fetch", {
+      configurable: true,
+      writable: true,
+      value: fetchMock,
     });
   });
 
@@ -74,6 +85,11 @@ describe("BookshelfPage", () => {
       configurable: true,
       writable: true,
       value: originalRevokeObjectURL,
+    });
+    Object.defineProperty(globalThis, "fetch", {
+      configurable: true,
+      writable: true,
+      value: originalFetch,
     });
     vi.clearAllMocks();
   });
@@ -201,10 +217,17 @@ describe("BookshelfPage", () => {
       },
     });
 
-    await waitFor(() => expect(uploadBookCover).toHaveBeenCalled());
+    await waitFor(() =>
+      expect(screen.getByAltText("Untitled Book cover")).toHaveAttribute(
+        "src",
+        "https://firebasestorage.googleapis.com/v0/b/test/o/cover-preview",
+      ),
+    );
+    expect(uploadBookCover).not.toHaveBeenCalled();
 
     fireEvent.click(screen.getByRole("button", { name: /save book/i }));
 
+    await waitFor(() => expect(uploadBookCover).toHaveBeenCalled());
     await waitFor(() =>
       expect(screen.queryByLabelText("Book Title")).not.toBeInTheDocument(),
     );
@@ -249,7 +272,7 @@ describe("BookshelfPage", () => {
     );
   });
 
-  it("updates the cover preview immediately after selecting an image", async () => {
+  it("keeps cover changes in the modal draft until the user saves", async () => {
     renderPage();
     addBook();
 
@@ -267,14 +290,20 @@ describe("BookshelfPage", () => {
     });
 
     await waitFor(() =>
-      expect(screen.getAllByAltText("Untitled Book cover").length).toBeGreaterThan(0),
-    );
-    await waitFor(() =>
-      expect(screen.getAllByAltText("Untitled Book cover")[0].getAttribute("src")).toContain(
+      expect(screen.getByAltText("Untitled Book cover")).toHaveAttribute(
+        "src",
         "https://firebasestorage.googleapis.com/v0/b/test/o/cover-preview",
       ),
     );
-    expect(syncTargetsNowMock).toHaveBeenCalledWith(["bookshelf"]);
+    expect(uploadBookCover).not.toHaveBeenCalled();
+    expect(syncTargetsNowMock).not.toHaveBeenCalled();
+
+    fireEvent.click(screen.getByRole("button", { name: /cancel/i }));
+
+    await waitFor(() =>
+      expect(screen.queryByLabelText("Book Title")).not.toBeInTheDocument(),
+    );
+    expect(screen.queryAllByAltText("Untitled Book cover")).toHaveLength(0);
   });
 
   it("downloads the uploaded cover from the book information modal", async () => {
@@ -294,9 +323,11 @@ describe("BookshelfPage", () => {
       },
     });
 
-    await waitFor(() =>
-      expect(screen.getAllByAltText("Untitled Book cover").length).toBeGreaterThan(0),
-    );
+    fireEvent.click(screen.getByRole("button", { name: /save book/i }));
+
+    await waitFor(() => expect(uploadBookCover).toHaveBeenCalled());
+    openBookMenu();
+    fireEvent.click(screen.getByText("Book Information"));
 
     const anchorClickMock = vi.fn();
     const originalCreateElement = document.createElement.bind(document);
@@ -317,6 +348,11 @@ describe("BookshelfPage", () => {
 
     fireEvent.click(screen.getByRole("button", { name: /download cover for untitled book/i }));
 
+    await waitFor(() =>
+      expect(fetchMock).toHaveBeenCalledWith(
+        "https://firebasestorage.googleapis.com/v0/b/test/o/cover-preview",
+      ),
+    );
     expect(anchorClickMock).toHaveBeenCalledTimes(1);
     createElementSpy.mockRestore();
   });
@@ -339,12 +375,9 @@ describe("BookshelfPage", () => {
       },
     });
 
-    await waitFor(() =>
-      expect(screen.getAllByAltText("Untitled Book cover").length).toBeGreaterThan(0),
-    );
+    fireEvent.click(screen.getByRole("button", { name: /save book/i }));
 
-    fireEvent.click(screen.getByRole("button", { name: /cancel/i }));
-
+    await waitFor(() => expect(uploadBookCover).toHaveBeenCalled());
     await waitFor(() =>
       expect(screen.queryByLabelText("Book Title")).not.toBeInTheDocument(),
     );
@@ -413,11 +446,19 @@ describe("BookshelfPage", () => {
       },
     });
 
-    await waitFor(() =>
-      expect(screen.getAllByAltText("Untitled Book cover").length).toBeGreaterThan(0),
-    );
+    fireEvent.click(screen.getByRole("button", { name: /save book/i }));
+
+    await waitFor(() => expect(uploadBookCover).toHaveBeenCalled());
+    openBookMenu();
+    fireEvent.click(screen.getByText("Book Information"));
 
     fireEvent.click(screen.getByRole("button", { name: /remove/i }));
+
+    expect(screen.getByText("Upload Cover")).toBeInTheDocument();
+    expect(screen.getAllByAltText("Untitled Book cover")).toHaveLength(1);
+    expect(deleteBookCover).not.toHaveBeenCalled();
+
+    fireEvent.click(screen.getByRole("button", { name: /save book/i }));
 
     await waitFor(() =>
       expect(screen.queryAllByAltText("Untitled Book cover")).toHaveLength(0),
@@ -443,11 +484,17 @@ describe("BookshelfPage", () => {
       },
     });
 
-    await waitFor(() =>
-      expect(screen.getAllByAltText("Untitled Book cover").length).toBeGreaterThan(0),
-    );
+    fireEvent.click(screen.getByRole("button", { name: /save book/i }));
+
+    await waitFor(() => expect(uploadBookCover).toHaveBeenCalled());
+    openBookMenu();
+    fireEvent.click(screen.getByText("Book Information"));
 
     fireEvent.click(screen.getByRole("button", { name: /remove/i }));
+
+    expect(screen.getByText("Upload Cover")).toBeInTheDocument();
+    expect(screen.getAllByAltText("Untitled Book cover")).toHaveLength(1);
+    fireEvent.click(screen.getByRole("button", { name: /save book/i }));
 
     await waitFor(() =>
       expect(screen.queryAllByAltText("Untitled Book cover")).toHaveLength(0),

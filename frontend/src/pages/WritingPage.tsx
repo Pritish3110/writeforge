@@ -68,6 +68,8 @@ interface BookInfoDraft {
   title: string;
   author: string;
   description: string;
+  coverPreviewUrl: string | null;
+  pendingCoverFile: File | null;
 }
 
 interface BookInfoErrors {
@@ -78,6 +80,54 @@ interface BookInfoErrors {
 const emptyBookInfoErrors: BookInfoErrors = {
   title: null,
   author: null,
+};
+
+const getFileExtensionFromMimeType = (mimeType: string) => {
+  switch (mimeType) {
+    case "image/jpeg":
+      return ".jpg";
+    case "image/png":
+      return ".png";
+    case "image/webp":
+      return ".webp";
+    case "image/gif":
+      return ".gif";
+    case "image/svg+xml":
+      return ".svg";
+    default:
+      return "";
+  }
+};
+
+const getFileExtensionFromName = (fileName: string) => {
+  const extensionMatch = fileName.match(/\.[a-z0-9]+$/i);
+  return extensionMatch?.[0]?.toLowerCase() || "";
+};
+
+const getFileExtensionFromUrl = (value: string) => {
+  try {
+    const pathname = new URL(value).pathname;
+    const extensionMatch = pathname.match(/\.[a-z0-9]+$/i);
+    return extensionMatch?.[0]?.toLowerCase() || "";
+  } catch {
+    return "";
+  }
+};
+
+const getCoverDownloadFilename = (
+  title: string,
+  options?: {
+    fileName?: string | null;
+    mimeType?: string | null;
+    url?: string | null;
+  },
+) => {
+  const extension =
+    (options?.fileName ? getFileExtensionFromName(options.fileName) : "") ||
+    (options?.mimeType ? getFileExtensionFromMimeType(options.mimeType) : "") ||
+    (options?.url ? getFileExtensionFromUrl(options.url) : "");
+
+  return `${sanitizeFileSegment(title)}-cover${extension}`;
 };
 
 const BookshelfPage = () => {
@@ -101,11 +151,21 @@ const BookshelfPage = () => {
   );
   const fileInputRef = useRef<HTMLInputElement | null>(null);
   const pendingCoverBookIdRef = useRef<string | null>(null);
+  const draftCoverObjectUrlRef = useRef<string | null>(null);
 
   const lastPersistedBooksJsonRef = useRef(JSON.stringify(storedBooks));
   const lastHydratedUserIdRef = useRef<string | null>(user?.id || null);
   const resolvedCoverPathsRef = useRef(new Set<string>());
   const booksRef = useRef(books);
+
+  const revokeDraftCoverObjectUrl = useCallback(() => {
+    if (!draftCoverObjectUrlRef.current) {
+      return;
+    }
+
+    URL.revokeObjectURL(draftCoverObjectUrlRef.current);
+    draftCoverObjectUrlRef.current = null;
+  }, []);
 
   const commitBooks = useCallback(
     (nextBooksOrUpdater: Book[] | ((currentBooks: Book[]) => Book[])) => {
@@ -245,18 +305,26 @@ const BookshelfPage = () => {
 
   useEffect(() => {
     if (!bookInfoId || !activeBookInfo) {
+      revokeDraftCoverObjectUrl();
       setBookInfoDraft(null);
       setBookInfoErrors(emptyBookInfoErrors);
       return;
     }
 
+    revokeDraftCoverObjectUrl();
     setBookInfoDraft({
       title: activeBookInfo.title,
       author: activeBookInfo.author,
       description: activeBookInfo.description,
+      coverPreviewUrl: activeBookInfo.coverUrl,
+      pendingCoverFile: null,
     });
     setBookInfoErrors(emptyBookInfoErrors);
-  }, [bookInfoId, activeBookInfo?.id]);
+  }, [bookInfoId, activeBookInfo?.id, revokeDraftCoverObjectUrl]);
+
+  useEffect(() => () => {
+    revokeDraftCoverObjectUrl();
+  }, [revokeDraftCoverObjectUrl]);
 
   const updateBook = (bookId: string, updater: (book: Book) => Book) => {
     commitBooks((current) =>
@@ -288,6 +356,7 @@ const BookshelfPage = () => {
   };
 
   const closeBookInfoDialog = () => {
+    revokeDraftCoverObjectUrl();
     setBookInfoId(null);
     setBookInfoDraft(null);
     setBookInfoErrors(emptyBookInfoErrors);
@@ -314,16 +383,73 @@ const BookshelfPage = () => {
     setBookInfoErrors(emptyBookInfoErrors);
     setIsSavingBook(true);
 
-    updateBook(activeBookInfo.id, (book) => ({
-      ...book,
-      title: trimmedTitle,
-      author: bookInfoDraft.author,
-      description: bookInfoDraft.description,
-      updatedAt: new Date(),
-    }));
+    try {
+      let nextCoverUrl = activeBookInfo.coverUrl;
+      let nextCoverStoragePath = activeBookInfo.coverStoragePath;
+      let shouldSyncBookshelf = false;
 
-    await new Promise((resolve) => window.setTimeout(resolve, 150));
-    closeBookInfoDialog();
+      if (bookInfoDraft.pendingCoverFile) {
+        if (!user?.id) {
+          toast.error("Sign in required", {
+            description: "Sign in to upload and sync book covers.",
+          });
+          return;
+        }
+
+        setIsCoverUploading(true);
+
+        const uploadedCover = await uploadBookCover(
+          user.id,
+          activeBookInfo.id,
+          bookInfoDraft.pendingCoverFile,
+        );
+
+        nextCoverUrl = uploadedCover.coverUrl;
+        nextCoverStoragePath = uploadedCover.coverStoragePath;
+        shouldSyncBookshelf = true;
+      } else if (
+        !bookInfoDraft.coverPreviewUrl &&
+        (activeBookInfo.coverUrl || activeBookInfo.coverStoragePath)
+      ) {
+        setIsCoverUploading(true);
+        await deleteBookCover(activeBookInfo.coverStoragePath);
+        nextCoverUrl = null;
+        nextCoverStoragePath = null;
+        shouldSyncBookshelf = true;
+      }
+
+      updateBook(activeBookInfo.id, (book) => ({
+        ...book,
+        title: trimmedTitle,
+        author: bookInfoDraft.author,
+        description: bookInfoDraft.description,
+        coverUrl: nextCoverUrl,
+        coverStoragePath: nextCoverStoragePath,
+        updatedAt: new Date(),
+      }));
+
+      if (shouldSyncBookshelf && isBackendSyncEnabled) {
+        try {
+          await syncTargetsNow(["bookshelf"]);
+        } catch (syncError) {
+          console.error("Unable to sync the updated cover to the workspace.", syncError);
+          toast.error("Cover saved locally", {
+            description:
+              "The cover changed here, but cloud sync still needs another try.",
+          });
+        }
+      }
+
+      closeBookInfoDialog();
+    } catch (error) {
+      console.error("Unable to save the book information.", error);
+      toast.error("Book save failed", {
+        description: getBookCoverUploadErrorMessage(error),
+      });
+    } finally {
+      setIsSavingBook(false);
+      setIsCoverUploading(false);
+    }
   };
 
   const handleOpenDelete = (bookId: string) => {
@@ -374,51 +500,25 @@ const BookshelfPage = () => {
       return;
     }
 
-    const bookToUpdate = books.find((entry) => entry.id === bookId);
-
-    if (!bookToUpdate) {
+    if (bookInfoId !== bookId) {
       return;
     }
 
-    if (!user?.id) {
-      toast.error("Sign in required", {
-        description: "Sign in to upload and sync book covers.",
-      });
-      return;
-    }
+    revokeDraftCoverObjectUrl();
 
-    setIsCoverUploading(true);
+    const previewUrl = URL.createObjectURL(file);
+    draftCoverObjectUrlRef.current = previewUrl;
 
-    try {
-      const uploadedCover = await uploadBookCover(user.id, bookId, file);
-
-      updateBook(bookId, (book) => ({
-        ...book,
-        coverUrl: uploadedCover.coverUrl,
-        coverStoragePath: uploadedCover.coverStoragePath,
-        updatedAt: new Date(),
-      }));
-
-      if (isBackendSyncEnabled) {
-        try {
-          await syncTargetsNow(["bookshelf"]);
-        } catch (syncError) {
-          console.error("Unable to sync the updated cover to the workspace.", syncError);
-          toast.error("Cover saved locally", {
-            description:
-              "The cover changed here, but cloud sync still needs another try.",
-          });
-        }
-      }
-    } catch (error) {
-      console.error("Unable to upload the cover image.", error);
-      toast.error("Cover upload failed", {
-        description: getBookCoverUploadErrorMessage(error),
-      });
-    } finally {
-      setIsCoverUploading(false);
-      setIsCoverDragActive(false);
-    }
+    setBookInfoDraft((current) =>
+      current
+        ? {
+            ...current,
+            coverPreviewUrl: previewUrl,
+            pendingCoverFile: file,
+          }
+        : current,
+    );
+    setIsCoverDragActive(false);
   };
 
   const handleCoverSelected = async (event: ChangeEvent<HTMLInputElement>) => {
@@ -436,42 +536,29 @@ const BookshelfPage = () => {
   };
 
   const handleRemoveCover = async (bookId: string) => {
-    const bookToUpdate = books.find((entry) => entry.id === bookId);
-
-    if (!bookToUpdate?.coverUrl && !bookToUpdate?.coverStoragePath) {
+    if (bookInfoId !== bookId || !activeBookInfo || !bookInfoDraft) {
       return;
     }
 
-    setIsCoverUploading(true);
-
-    commitBooks((current) =>
-      current.map((book) =>
-        book.id === bookId
-          ? {
-              ...book,
-              coverUrl: null,
-              coverStoragePath: null,
-              updatedAt: new Date(),
-            }
-          : book,
-      ),
-    );
-
-    try {
-      await deleteBookCover(bookToUpdate.coverStoragePath);
-
-      if (isBackendSyncEnabled) {
-        await syncTargetsNow(["bookshelf"]);
-      }
-    } catch (error) {
-      console.error("Unable to sync the removed cover to the workspace.", error);
-      toast.error("Cover removed locally", {
-        description:
-          "The cover is gone here, but cloud sync still needs another try.",
-      });
-    } finally {
-      setIsCoverUploading(false);
+    if (
+      !bookInfoDraft.coverPreviewUrl &&
+      !bookInfoDraft.pendingCoverFile &&
+      !activeBookInfo.coverUrl &&
+      !activeBookInfo.coverStoragePath
+    ) {
+      return;
     }
+
+    revokeDraftCoverObjectUrl();
+    setBookInfoDraft((current) =>
+      current
+        ? {
+            ...current,
+            coverPreviewUrl: null,
+            pendingCoverFile: null,
+          }
+        : current,
+    );
   };
 
   const handleCoverPanelKeyDown = (
@@ -523,19 +610,59 @@ const BookshelfPage = () => {
     console.log(`Download DOCX for ${book.title}`);
   };
 
-  const handleDownloadCover = (bookId: string) => {
+  const handleDownloadCover = async (bookId: string) => {
     const book = books.find((entry) => entry.id === bookId);
-    if (!book?.coverUrl) {
+
+    if (!book) {
       return;
     }
 
-    const link = document.createElement("a");
-    link.href = book.coverUrl;
-    link.download = `${sanitizeFileSegment(book.title)}-cover`;
-    link.rel = "noopener";
-    document.body.appendChild(link);
-    link.click();
-    document.body.removeChild(link);
+    const draftForBook = activeBookInfo?.id === bookId ? bookInfoDraft : null;
+
+    try {
+      let blobToDownload: Blob | null = null;
+      let sourceUrl: string | null = null;
+      let sourceFileName: string | null = null;
+
+      if (draftForBook?.pendingCoverFile) {
+        blobToDownload = draftForBook.pendingCoverFile;
+        sourceFileName = draftForBook.pendingCoverFile.name;
+      } else {
+        sourceUrl = draftForBook?.coverPreviewUrl ?? book.coverUrl;
+
+        if (!sourceUrl) {
+          return;
+        }
+
+        const response = await fetch(sourceUrl);
+
+        if (!response.ok) {
+          throw new Error(`Cover download failed with status ${response.status}`);
+        }
+
+        blobToDownload = await response.blob();
+      }
+
+      const downloadUrl = URL.createObjectURL(blobToDownload);
+      const link = document.createElement("a");
+      link.href = downloadUrl;
+      link.download = getCoverDownloadFilename(book.title, {
+        fileName: sourceFileName,
+        mimeType: blobToDownload.type,
+        url: sourceUrl,
+      });
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+      window.setTimeout(() => {
+        URL.revokeObjectURL(downloadUrl);
+      }, 0);
+    } catch (error) {
+      console.error("Unable to download the cover image.", error);
+      toast.error("Cover download failed", {
+        description: "Please try again in a moment.",
+      });
+    }
   };
 
   return (
@@ -631,7 +758,7 @@ const BookshelfPage = () => {
                     role="button"
                     tabIndex={0}
                     aria-label={
-                      activeBookInfo.coverUrl
+                      bookInfoDraft.coverPreviewUrl
                         ? `Cover panel for ${activeBookInfo.title}`
                         : `Upload cover for ${activeBookInfo.title}`
                     }
@@ -653,20 +780,20 @@ const BookshelfPage = () => {
                           <p className="text-sm text-muted-foreground">Updating cover...</p>
                         </div>
                       </div>
-                    ) : activeBookInfo.coverUrl ? (
+                    ) : bookInfoDraft.coverPreviewUrl ? (
                       <>
                         <img
-                          src={activeBookInfo.coverUrl}
+                          src={bookInfoDraft.coverPreviewUrl}
                           alt={`${activeBookInfo.title} cover`}
                           className="h-full w-full object-cover transition-transform duration-500 group-hover:scale-[1.03]"
                         />
                         <div className="pointer-events-none absolute inset-x-0 bottom-0 h-36 bg-gradient-to-t from-background via-background/40 to-transparent" />
                         <div className="pointer-events-none absolute inset-x-0 bottom-0 p-5">
                           <p className="truncate text-lg font-semibold tracking-[-0.03em] text-foreground">
-                            {bookInfoDraft.title.trim() || "Untitled Book"}
+                            {activeBookInfo.title.trim() || "Untitled Book"}
                           </p>
                           <p className="mt-1 truncate text-sm text-muted-foreground">
-                            {bookInfoDraft.author.trim() || "Author"}
+                            {activeBookInfo.author.trim() || "Author"}
                           </p>
                         </div>
                         <div className="absolute inset-0 flex items-center justify-center bg-background/68 opacity-0 transition-opacity duration-200 group-hover:opacity-100">
@@ -720,8 +847,8 @@ const BookshelfPage = () => {
                       type="button"
                       variant="outline"
                       size="sm"
-                      onClick={() => handleDownloadCover(activeBookInfo.id)}
-                      disabled={!activeBookInfo.coverUrl}
+                      onClick={() => void handleDownloadCover(activeBookInfo.id)}
+                      disabled={!bookInfoDraft.coverPreviewUrl && !bookInfoDraft.pendingCoverFile}
                       aria-label={`Download cover for ${activeBookInfo.title}`}
                       className="h-10 shrink-0 rounded-xl px-4"
                     >
