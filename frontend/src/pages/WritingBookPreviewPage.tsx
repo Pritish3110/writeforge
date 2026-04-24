@@ -56,10 +56,10 @@ const WritingBookPreviewPage = () => {
   const visibleChapterEntries = useMemo(
     () =>
       sortChapterEntries(
-        filterChapterEntries(chapterEntries, searchQuery),
+        filterChapterEntries(publishedChapterEntries, searchQuery),
         sortOption,
       ),
-    [chapterEntries, searchQuery, sortOption],
+    [publishedChapterEntries, searchQuery, sortOption],
   );
 
   const handleContinueWriting = () => {
@@ -238,7 +238,7 @@ const WritingBookPreviewPage = () => {
           </div>
         </div>
 
-        {chapterEntries.length > 0 ? (
+        {publishedChapterEntries.length > 0 ? (
           <div className="mt-6">
             <WritingChapterGrid
               entries={visibleChapterEntries}
@@ -251,7 +251,7 @@ const WritingBookPreviewPage = () => {
               No chapters yet
             </p>
             <p className="mt-2 text-sm leading-7 text-muted-foreground">
-              Chapters will appear here once they are added to this book.
+              Chapters will appear here once they are published.
             </p>
           </div>
         )}
