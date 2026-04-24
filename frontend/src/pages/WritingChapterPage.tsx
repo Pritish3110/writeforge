@@ -48,6 +48,7 @@ const WritingChapterPage = () => {
     }
 
     navigate(getBookChapterRoute(book.id, nextSelectedChapterId));
+    window.scrollTo(0, 0);
   };
 
   const handlePrevious = () => {
@@ -56,6 +57,7 @@ const WritingChapterPage = () => {
     }
 
     navigate(getBookChapterRoute(book.id, previousChapterId));
+    window.scrollTo(0, 0);
   };
 
   const handleNext = () => {
@@ -64,6 +66,7 @@ const WritingChapterPage = () => {
     }
 
     navigate(getBookChapterRoute(book.id, nextChapterId));
+    window.scrollTo(0, 0);
   };
 
   if (!book || !activeChapterEntry) {

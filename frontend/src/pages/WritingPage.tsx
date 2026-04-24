@@ -38,6 +38,7 @@ import {
 } from "@/services/bookCoverStorage";
 import { validateImageFile } from "@/lib/imageUtils";
 import { cn } from "@/lib/utils";
+import { downloadBookAsPdf, downloadBookAsDocx } from "@/services/bookExportService";
 
 const getAuthorName = (value: string | null | undefined) => value?.trim() || "User";
 const dialogClassName = "max-w-5xl overflow-hidden border-border bg-card p-0";
@@ -615,13 +616,13 @@ const BookshelfPage = () => {
   const handleDownloadPdf = (bookId: string) => {
     const book = books.find((entry) => entry.id === bookId);
     if (!book) return;
-    console.log(`Download PDF for ${book.title}`);
+    downloadBookAsPdf(book);
   };
 
   const handleDownloadDocx = (bookId: string) => {
     const book = books.find((entry) => entry.id === bookId);
     if (!book) return;
-    console.log(`Download DOCX for ${book.title}`);
+    void downloadBookAsDocx(book);
   };
 
   const handleDownloadCover = async (bookId: string) => {

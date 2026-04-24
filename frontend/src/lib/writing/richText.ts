@@ -33,11 +33,11 @@ const createContainer = () => {
 
 const escapeHtml = (value: string) =>
   value
-    .replaceAll("&", "&amp;")
-    .replaceAll("<", "&lt;")
-    .replaceAll(">", "&gt;")
-    .replaceAll('"', "&quot;")
-    .replaceAll("'", "&#39;");
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/"/g, "&quot;")
+    .replace(/'/g, "&#39;");
 
 const normalizeFontSizeValue = (value: string | null | undefined) => {
   if (!value) {
@@ -205,8 +205,12 @@ export const clampChapterFontSize = (value: string) => {
   return String(Math.max(1, parsed));
 };
 
-export const buildAutoDashReplacement = (hyphenRun: string) =>
-  "—".repeat(Math.max(1, hyphenRun.length - 1));
+export const buildAutoDashReplacement = (hyphenRun: string): string => {
+  const count = hyphenRun.length;
+  if (count < 2) return hyphenRun;
+  // 2 hyphens → 1 em dash, 3 → 2, 4 → 3, etc.
+  return "—".repeat(count - 1);
+};
 
 export const convertPlainTextToRichTextHtml = (value: string) => {
   const normalizedValue = value.replace(/\r\n?/g, "\n");

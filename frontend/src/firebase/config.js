@@ -6,16 +6,13 @@ const readEnvOverride = (key, fallback) => {
 };
 
 const firebaseConfig = {
-  apiKey: "AIzaSyAnKzPTUbnyBnibXrDoa8Rg6yH16CpFhzo",
-  authDomain: "writerz-uk3312.firebaseapp.com",
-  projectId: "writerz-uk3312",
-  storageBucket: readEnvOverride(
-    "VITE_FIREBASE_STORAGE_BUCKET",
-    "writerz-uk3312.firebasestorage.app",
-  ),
-  messagingSenderId: "304343634359",
-  appId: "1:304343634359:web:b6539ecb33bb8259f34ba2",
-  measurementId: "G-4DQ2T06YPT",
+  apiKey: readEnvOverride("VITE_FIREBASE_API_KEY", ""),
+  authDomain: readEnvOverride("VITE_FIREBASE_AUTH_DOMAIN", ""),
+  projectId: readEnvOverride("VITE_FIREBASE_PROJECT_ID", ""),
+  storageBucket: readEnvOverride("VITE_FIREBASE_STORAGE_BUCKET", ""),
+  messagingSenderId: readEnvOverride("VITE_FIREBASE_MESSAGING_SENDER_ID", ""),
+  appId: readEnvOverride("VITE_FIREBASE_APP_ID", ""),
+  measurementId: readEnvOverride("VITE_FIREBASE_MEASUREMENT_ID", ""),
 };
 
 export const app = getApps().length > 0 ? getApp() : initializeApp(firebaseConfig);
