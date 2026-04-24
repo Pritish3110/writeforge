@@ -614,21 +614,30 @@ const BookshelfPage = () => {
     await handleUploadCoverFile(bookId, file);
   };
 
-  const handleDownloadPdf = (bookId: string) => {
+  const handleDownloadPdf = async (bookId: string) => {
     const book = books.find((entry) => entry.id === bookId);
     if (!book) return;
+    // Resolve cover URL if not yet loaded
+    let coverUrl = book.coverUrl;
+    if (!coverUrl && book.coverStoragePath) {
+      coverUrl = await loadBookCoverUrl(book.coverStoragePath);
+    }
     void downloadBookAsPdf(book, {
       displayName: getStoredDisplayName(),
-      coverUrl: book.coverUrl,
+      coverUrl,
     });
   };
 
-  const handleDownloadDocx = (bookId: string) => {
+  const handleDownloadDocx = async (bookId: string) => {
     const book = books.find((entry) => entry.id === bookId);
     if (!book) return;
+    let coverUrl = book.coverUrl;
+    if (!coverUrl && book.coverStoragePath) {
+      coverUrl = await loadBookCoverUrl(book.coverStoragePath);
+    }
     void downloadBookAsDocx(book, {
       displayName: getStoredDisplayName(),
-      coverUrl: book.coverUrl,
+      coverUrl,
     });
   };
 

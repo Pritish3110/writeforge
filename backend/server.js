@@ -52,6 +52,39 @@ app.use("/api/generate", generateLimiter);
 app.use("/api", aiRoutes);
 app.use("/api/learning", learningRoutes);
 
+// Image proxy — fetches Firebase Storage images server-side to bypass browser CORS
+app.get("/api/image-proxy", async (request, response) => {
+  try {
+    const { url } = request.query;
+
+    if (!url || typeof url !== "string") {
+      return response.status(400).json({ error: "Missing url parameter" });
+    }
+
+    // Only allow Firebase Storage URLs for security
+    if (!url.includes("firebasestorage.googleapis.com")) {
+      return response.status(403).json({ error: "Only Firebase Storage URLs are allowed" });
+    }
+
+    const imageResponse = await fetch(url);
+
+    if (!imageResponse.ok) {
+      return response.status(imageResponse.status).json({ error: "Failed to fetch image" });
+    }
+
+    const arrayBuffer = await imageResponse.arrayBuffer();
+    const base64 = Buffer.from(arrayBuffer).toString("base64");
+    const contentType = imageResponse.headers.get("content-type") || "image/jpeg";
+
+    response.json({
+      base64: `data:${contentType};base64,${base64}`,
+    });
+  } catch (error) {
+    console.error("Image proxy error:", error);
+    response.status(500).json({ error: "Failed to fetch image" });
+  }
+});
+
 app.use((error, _request, response, _next) => {
   console.error("Unhandled backend error.", error);
   response.status(error?.statusCode || 500).json({

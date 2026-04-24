@@ -1,5 +1,6 @@
 import {
   deleteObject,
+  getBlob,
   getDownloadURL,
   getStorage,
   ref,
@@ -83,5 +84,25 @@ export const deleteFile = async (storagePath) => {
     }
 
     console.error("Failed to delete file from storage.", error);
+  }
+};
+
+/**
+ * Downloads a file from Firebase Storage as a Blob (bypasses CORS).
+ *
+ * @param {string} storagePath — Full path in the bucket.
+ * @returns {Promise<Blob | null>} The file blob, or null if not found.
+ */
+export const getFileBlob = async (storagePath) => {
+  try {
+    const storageRef = ref(storage, storagePath);
+    return await getBlob(storageRef);
+  } catch (error) {
+    if (error?.code === "storage/object-not-found") {
+      return null;
+    }
+
+    console.error("Failed to download file blob.", error);
+    return null;
   }
 };

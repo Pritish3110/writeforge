@@ -12,12 +12,12 @@ import { saveAs } from "file-saver";
 import type { Book } from "@/components/writing/types";
 
 /**
- * Options for book export, including the user's display name and cover image.
+ * Options for book export.
  */
 export interface BookExportOptions {
   /** The account display name to use as the author on the title page */
   displayName: string;
-  /** The resolved cover image URL (if the book has a cover) */
+  /** The cover image download URL (Firebase Storage) */
   coverUrl?: string | null;
 }
 
@@ -47,41 +47,52 @@ const sanitizeFilename = (name: string): string =>
   name.replace(/[^a-zA-Z0-9\s\-_]/g, "").trim() || "book";
 
 /**
- * Fetch an image URL and return it as a base64 data URI + dimensions.
- * Returns null if the fetch fails.
+ * Fetch an image via the backend proxy to bypass CORS.
+ * Returns a base64 data URI string or null on failure.
  */
-const fetchImageAsBase64 = async (
-  url: string,
-): Promise<{ base64: string; width: number; height: number; format: string } | null> => {
+const fetchImageViaProxy = async (
+  imageUrl: string,
+): Promise<string | null> => {
   try {
-    const response = await fetch(url);
+    const apiBase = import.meta.env.VITE_API_URL || "";
+    const proxyUrl = `${apiBase}/api/image-proxy?url=${encodeURIComponent(imageUrl)}`;
+    const response = await fetch(proxyUrl);
+
     if (!response.ok) return null;
 
-    const blob = await response.blob();
-    const format = blob.type.includes("png") ? "PNG" : "JPEG";
-
-    // Convert blob to base64
-    const base64 = await new Promise<string>((resolve, reject) => {
-      const reader = new FileReader();
-      reader.onloadend = () => resolve(reader.result as string);
-      reader.onerror = reject;
-      reader.readAsDataURL(blob);
-    });
-
-    // Get image dimensions
-    const dimensions = await new Promise<{ width: number; height: number }>(
-      (resolve, reject) => {
-        const img = new Image();
-        img.onload = () => resolve({ width: img.width, height: img.height });
-        img.onerror = reject;
-        img.src = base64;
-      },
-    );
-
-    return { base64, ...dimensions, format };
+    const data = await response.json();
+    return data.base64 || null;
   } catch {
     return null;
   }
+};
+
+/**
+ * Get image dimensions from a base64 data URI.
+ */
+const getImageDimensions = (
+  base64: string,
+): Promise<{ width: number; height: number }> =>
+  new Promise((resolve, reject) => {
+    const img = new Image();
+    img.onload = () => resolve({ width: img.width, height: img.height });
+    img.onerror = reject;
+    img.src = base64;
+  });
+
+/**
+ * Convert a base64 data URI to a Uint8Array (for DOCX ImageRun).
+ */
+const base64ToUint8Array = (base64DataUri: string): Uint8Array => {
+  const base64 = base64DataUri.split(",")[1];
+  const binary = atob(base64);
+  const bytes = new Uint8Array(binary.length);
+
+  for (let i = 0; i < binary.length; i++) {
+    bytes[i] = binary.charCodeAt(i);
+  }
+
+  return bytes;
 };
 
 // ─── PDF Export ───────────────────────────────────────────────────────────────
@@ -105,31 +116,30 @@ export const downloadBookAsPdf = async (
   let hasCoverPage = false;
 
   if (options.coverUrl) {
-    const coverImage = await fetchImageAsBase64(options.coverUrl);
+    const base64 = await fetchImageViaProxy(options.coverUrl);
 
-    if (coverImage) {
-      hasCoverPage = true;
+    if (base64) {
+      try {
+        const dimensions = await getImageDimensions(base64);
+        const format = base64.includes("image/png") ? "PNG" : "JPEG";
 
-      // Scale cover to fit the page with margins
-      const maxCoverWidth = pageWidth - 40;
-      const maxCoverHeight = pageHeight - 40;
-      const scale = Math.min(
-        maxCoverWidth / coverImage.width,
-        maxCoverHeight / coverImage.height,
-      );
-      const renderWidth = coverImage.width * scale;
-      const renderHeight = coverImage.height * scale;
-      const x = (pageWidth - renderWidth) / 2;
-      const y = (pageHeight - renderHeight) / 2;
+        hasCoverPage = true;
 
-      doc.addImage(
-        coverImage.base64,
-        coverImage.format,
-        x,
-        y,
-        renderWidth,
-        renderHeight,
-      );
+        const maxCoverWidth = pageWidth - 40;
+        const maxCoverHeight = pageHeight - 40;
+        const scale = Math.min(
+          maxCoverWidth / dimensions.width,
+          maxCoverHeight / dimensions.height,
+        );
+        const renderWidth = dimensions.width * scale;
+        const renderHeight = dimensions.height * scale;
+        const x = (pageWidth - renderWidth) / 2;
+        const y = (pageHeight - renderHeight) / 2;
+
+        doc.addImage(base64, format, x, y, renderWidth, renderHeight);
+      } catch {
+        // Cover processing failed, skip it
+      }
     }
   }
 
@@ -144,7 +154,6 @@ export const downloadBookAsPdf = async (
   const titleY = pageHeight / 3;
   doc.text(bookTitleLines, pageWidth / 2, titleY, { align: "center" });
 
-  // Use the account display name, not the book's author field
   doc.setFont("helvetica", "normal");
   doc.setFontSize(14);
   doc.text(options.displayName, pageWidth / 2, titleY + bookTitleLines.length * 10 + 10, {
@@ -170,7 +179,6 @@ export const downloadBookAsPdf = async (
 
     let cursorY = marginTop;
 
-    // Chapter title
     doc.setFont("helvetica", "bold");
     doc.setFontSize(16);
     const chapterTitle = chapter.title || `Chapter ${i + 1}`;
@@ -178,7 +186,6 @@ export const downloadBookAsPdf = async (
     doc.text(chapterTitleLines, marginLeft, cursorY);
     cursorY += chapterTitleLines.length * 8 + 10;
 
-    // Chapter content
     doc.setFont("helvetica", "normal");
     doc.setFontSize(11);
 
@@ -228,34 +235,16 @@ export const downloadBookAsDocx = async (
 
   // ── Page 1: Cover image (if available) ──
   if (options.coverUrl) {
-    try {
-      const response = await fetch(options.coverUrl);
+    const base64 = await fetchImageViaProxy(options.coverUrl);
 
-      if (response.ok) {
-        const blob = await response.blob();
-        const arrayBuffer = await blob.arrayBuffer();
-        const uint8 = new Uint8Array(arrayBuffer);
+    if (base64) {
+      try {
+        const uint8 = base64ToUint8Array(base64);
+        const dimensions = await getImageDimensions(base64);
+        const isPng = base64.includes("image/png");
 
-        // Get dimensions for proper scaling
-        const base64 = await new Promise<string>((resolve, reject) => {
-          const reader = new FileReader();
-          reader.onloadend = () => resolve(reader.result as string);
-          reader.onerror = reject;
-          reader.readAsDataURL(blob);
-        });
-
-        const dimensions = await new Promise<{ width: number; height: number }>(
-          (resolve, reject) => {
-            const img = new Image();
-            img.onload = () => resolve({ width: img.width, height: img.height });
-            img.onerror = reject;
-            img.src = base64;
-          },
-        );
-
-        // Scale to fit page width (~6 inches = 432pt max)
         const maxWidth = 432;
-        const maxHeight = 648; // ~9 inches
+        const maxHeight = 648;
         const scale = Math.min(maxWidth / dimensions.width, maxHeight / dimensions.height);
         const renderWidth = Math.round(dimensions.width * scale);
         const renderHeight = Math.round(dimensions.height * scale);
@@ -266,18 +255,17 @@ export const downloadBookAsDocx = async (
               new ImageRun({
                 data: uint8,
                 transformation: { width: renderWidth, height: renderHeight },
-                type: blob.type.includes("png") ? "png" : "jpg",
+                type: isPng ? "png" : "jpg",
               }),
             ],
             alignment: AlignmentType.CENTER,
             spacing: { before: 200 },
           }),
-          // Page break after cover
           new Paragraph({ children: [new PageBreak()] }),
         );
+      } catch {
+        // Cover processing failed, skip it
       }
-    } catch {
-      // Cover fetch failed, skip it
     }
   }
 
@@ -298,7 +286,6 @@ export const downloadBookAsDocx = async (
       ],
       alignment: AlignmentType.CENTER,
     }),
-    // Use account display name
     new Paragraph({
       children: [
         new TextRun({
@@ -336,7 +323,6 @@ export const downloadBookAsDocx = async (
     const plainText = htmlToPlainText(chapter.content);
     const paragraphs = plainText.split("\n");
 
-    // Page break before each chapter
     sections.push(new Paragraph({ children: [new PageBreak()] }));
 
     // Chapter title — black text, NOT the blue Heading style
@@ -355,7 +341,6 @@ export const downloadBookAsDocx = async (
       }),
     );
 
-    // Chapter content paragraphs
     for (const paragraph of paragraphs) {
       sections.push(
         new Paragraph({
