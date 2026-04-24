@@ -120,23 +120,11 @@ export const downloadBookAsPdf = async (
 
     if (base64) {
       try {
-        const dimensions = await getImageDimensions(base64);
+        hasCoverPage = true;
         const format = base64.includes("image/png") ? "PNG" : "JPEG";
 
-        hasCoverPage = true;
-
-        const maxCoverWidth = pageWidth - 40;
-        const maxCoverHeight = pageHeight - 40;
-        const scale = Math.min(
-          maxCoverWidth / dimensions.width,
-          maxCoverHeight / dimensions.height,
-        );
-        const renderWidth = dimensions.width * scale;
-        const renderHeight = dimensions.height * scale;
-        const x = (pageWidth - renderWidth) / 2;
-        const y = (pageHeight - renderHeight) / 2;
-
-        doc.addImage(base64, format, x, y, renderWidth, renderHeight);
+        // Stretch cover to fill the entire page (no margins)
+        doc.addImage(base64, format, 0, 0, pageWidth, pageHeight);
       } catch {
         // Cover processing failed, skip it
       }
@@ -240,26 +228,23 @@ export const downloadBookAsDocx = async (
     if (base64) {
       try {
         const uint8 = base64ToUint8Array(base64);
-        const dimensions = await getImageDimensions(base64);
         const isPng = base64.includes("image/png");
 
-        const maxWidth = 432;
-        const maxHeight = 648;
-        const scale = Math.min(maxWidth / dimensions.width, maxHeight / dimensions.height);
-        const renderWidth = Math.round(dimensions.width * scale);
-        const renderHeight = Math.round(dimensions.height * scale);
+        // Fill entire page: 612x792 points = 8.5x11 inches (US Letter)
+        const fullPageWidth = 612;
+        const fullPageHeight = 792;
 
         sections.push(
           new Paragraph({
             children: [
               new ImageRun({
                 data: uint8,
-                transformation: { width: renderWidth, height: renderHeight },
+                transformation: { width: fullPageWidth, height: fullPageHeight },
                 type: isPng ? "png" : "jpg",
               }),
             ],
             alignment: AlignmentType.CENTER,
-            spacing: { before: 200 },
+            spacing: { before: 0 },
           }),
           new Paragraph({ children: [new PageBreak()] }),
         );
