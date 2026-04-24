@@ -4,33 +4,35 @@ import {
   Packer,
   Paragraph,
   TextRun,
-  HeadingLevel,
   PageBreak,
   AlignmentType,
+  ImageRun,
 } from "docx";
 import { saveAs } from "file-saver";
 import type { Book } from "@/components/writing/types";
 
 /**
+ * Options for book export, including the user's display name and cover image.
+ */
+export interface BookExportOptions {
+  /** The account display name to use as the author on the title page */
+  displayName: string;
+  /** The resolved cover image URL (if the book has a cover) */
+  coverUrl?: string | null;
+}
+
+/**
  * Strip HTML tags and decode entities to get readable plain text.
- * Converts <p> and <br> to newlines for proper formatting.
  */
 const htmlToPlainText = (html: string): string => {
   if (!html || !html.trim()) return "";
-
-  // If it's already plain text (no HTML tags), return as-is
   if (!/<[a-z][\s\S]*>/i.test(html)) return html;
 
   let text = html;
-  // Convert </p><p> boundaries to double newlines (paragraph breaks)
   text = text.replace(/<\/p>\s*<p[^>]*>/gi, "\n");
-  // Convert <br> tags to newlines
   text = text.replace(/<br\s*\/?>/gi, "\n");
-  // Remove opening <p> and closing </p> at start/end
   text = text.replace(/<\/?p[^>]*>/gi, "");
-  // Remove all remaining HTML tags
   text = text.replace(/<[^>]+>/g, "");
-  // Decode common HTML entities
   text = text.replace(/&amp;/g, "&");
   text = text.replace(/&lt;/g, "<");
   text = text.replace(/&gt;/g, ">");
@@ -41,23 +43,54 @@ const htmlToPlainText = (html: string): string => {
   return text.trim();
 };
 
-/**
- * Sanitize a filename by removing special characters.
- */
 const sanitizeFilename = (name: string): string =>
   name.replace(/[^a-zA-Z0-9\s\-_]/g, "").trim() || "book";
 
+/**
+ * Fetch an image URL and return it as a base64 data URI + dimensions.
+ * Returns null if the fetch fails.
+ */
+const fetchImageAsBase64 = async (
+  url: string,
+): Promise<{ base64: string; width: number; height: number; format: string } | null> => {
+  try {
+    const response = await fetch(url);
+    if (!response.ok) return null;
+
+    const blob = await response.blob();
+    const format = blob.type.includes("png") ? "PNG" : "JPEG";
+
+    // Convert blob to base64
+    const base64 = await new Promise<string>((resolve, reject) => {
+      const reader = new FileReader();
+      reader.onloadend = () => resolve(reader.result as string);
+      reader.onerror = reject;
+      reader.readAsDataURL(blob);
+    });
+
+    // Get image dimensions
+    const dimensions = await new Promise<{ width: number; height: number }>(
+      (resolve, reject) => {
+        const img = new Image();
+        img.onload = () => resolve({ width: img.width, height: img.height });
+        img.onerror = reject;
+        img.src = base64;
+      },
+    );
+
+    return { base64, ...dimensions, format };
+  } catch {
+    return null;
+  }
+};
+
 // ─── PDF Export ───────────────────────────────────────────────────────────────
 
-/**
- * Download all chapters of a book as a PDF file.
- * Each chapter starts on a new page with its title as a heading.
- */
-export const downloadBookAsPdf = (book: Book): void => {
-  const doc = new jsPDF({
-    unit: "mm",
-    format: "a4",
-  });
+export const downloadBookAsPdf = async (
+  book: Book,
+  options: BookExportOptions,
+): Promise<void> => {
+  const doc = new jsPDF({ unit: "mm", format: "a4" });
 
   const pageWidth = doc.internal.pageSize.getWidth();
   const pageHeight = doc.internal.pageSize.getHeight();
@@ -66,22 +99,55 @@ export const downloadBookAsPdf = (book: Book): void => {
   const marginTop = 30;
   const marginBottom = 25;
   const maxTextWidth = pageWidth - marginLeft - marginRight;
-
-  const titleFontSize = 22;
-  const chapterTitleFontSize = 16;
-  const bodyFontSize = 11;
   const lineSpacing = 6;
 
-  // ── Book title page ──
+  // ── Page 1: Cover image (if available) ──
+  let hasCoverPage = false;
+
+  if (options.coverUrl) {
+    const coverImage = await fetchImageAsBase64(options.coverUrl);
+
+    if (coverImage) {
+      hasCoverPage = true;
+
+      // Scale cover to fit the page with margins
+      const maxCoverWidth = pageWidth - 40;
+      const maxCoverHeight = pageHeight - 40;
+      const scale = Math.min(
+        maxCoverWidth / coverImage.width,
+        maxCoverHeight / coverImage.height,
+      );
+      const renderWidth = coverImage.width * scale;
+      const renderHeight = coverImage.height * scale;
+      const x = (pageWidth - renderWidth) / 2;
+      const y = (pageHeight - renderHeight) / 2;
+
+      doc.addImage(
+        coverImage.base64,
+        coverImage.format,
+        x,
+        y,
+        renderWidth,
+        renderHeight,
+      );
+    }
+  }
+
+  // ── Page 2: Title page ──
+  if (hasCoverPage) {
+    doc.addPage();
+  }
+
   doc.setFont("helvetica", "bold");
-  doc.setFontSize(titleFontSize);
+  doc.setFontSize(22);
   const bookTitleLines = doc.splitTextToSize(book.title, maxTextWidth);
   const titleY = pageHeight / 3;
   doc.text(bookTitleLines, pageWidth / 2, titleY, { align: "center" });
 
+  // Use the account display name, not the book's author field
   doc.setFont("helvetica", "normal");
   doc.setFontSize(14);
-  doc.text(book.author, pageWidth / 2, titleY + bookTitleLines.length * 10 + 10, {
+  doc.text(options.displayName, pageWidth / 2, titleY + bookTitleLines.length * 10 + 10, {
     align: "center",
   });
 
@@ -106,29 +172,26 @@ export const downloadBookAsPdf = (book: Book): void => {
 
     // Chapter title
     doc.setFont("helvetica", "bold");
-    doc.setFontSize(chapterTitleFontSize);
+    doc.setFontSize(16);
     const chapterTitle = chapter.title || `Chapter ${i + 1}`;
-    const titleLines = doc.splitTextToSize(chapterTitle, maxTextWidth);
-    doc.text(titleLines, marginLeft, cursorY);
-    cursorY += titleLines.length * 8 + 10;
+    const chapterTitleLines = doc.splitTextToSize(chapterTitle, maxTextWidth);
+    doc.text(chapterTitleLines, marginLeft, cursorY);
+    cursorY += chapterTitleLines.length * 8 + 10;
 
     // Chapter content
     doc.setFont("helvetica", "normal");
-    doc.setFontSize(bodyFontSize);
+    doc.setFontSize(11);
 
     const plainText = htmlToPlainText(chapter.content);
     const paragraphs = plainText.split("\n");
 
     for (const paragraph of paragraphs) {
       if (!paragraph.trim()) {
-        // Empty line = paragraph break
         cursorY += lineSpacing;
-
         if (cursorY > pageHeight - marginBottom) {
           doc.addPage();
           cursorY = marginTop;
         }
-
         continue;
       }
 
@@ -139,12 +202,10 @@ export const downloadBookAsPdf = (book: Book): void => {
           doc.addPage();
           cursorY = marginTop;
         }
-
         doc.text(line, marginLeft, cursorY);
         cursorY += lineSpacing;
       }
 
-      // Small gap after a paragraph
       cursorY += 2;
     }
   }
@@ -155,18 +216,72 @@ export const downloadBookAsPdf = (book: Book): void => {
 
 // ─── DOCX Export ──────────────────────────────────────────────────────────────
 
-/**
- * Download all chapters of a book as a DOCX file.
- * Each chapter starts on a new page with its title as a heading.
- */
-export const downloadBookAsDocx = async (book: Book): Promise<void> => {
+export const downloadBookAsDocx = async (
+  book: Book,
+  options: BookExportOptions,
+): Promise<void> => {
   const publishedChapters = book.chapters.filter(
     (ch) => ch.title.trim() || ch.content.trim(),
   );
 
   const sections: Paragraph[] = [];
 
-  // ── Book title page ──
+  // ── Page 1: Cover image (if available) ──
+  if (options.coverUrl) {
+    try {
+      const response = await fetch(options.coverUrl);
+
+      if (response.ok) {
+        const blob = await response.blob();
+        const arrayBuffer = await blob.arrayBuffer();
+        const uint8 = new Uint8Array(arrayBuffer);
+
+        // Get dimensions for proper scaling
+        const base64 = await new Promise<string>((resolve, reject) => {
+          const reader = new FileReader();
+          reader.onloadend = () => resolve(reader.result as string);
+          reader.onerror = reject;
+          reader.readAsDataURL(blob);
+        });
+
+        const dimensions = await new Promise<{ width: number; height: number }>(
+          (resolve, reject) => {
+            const img = new Image();
+            img.onload = () => resolve({ width: img.width, height: img.height });
+            img.onerror = reject;
+            img.src = base64;
+          },
+        );
+
+        // Scale to fit page width (~6 inches = 432pt max)
+        const maxWidth = 432;
+        const maxHeight = 648; // ~9 inches
+        const scale = Math.min(maxWidth / dimensions.width, maxHeight / dimensions.height);
+        const renderWidth = Math.round(dimensions.width * scale);
+        const renderHeight = Math.round(dimensions.height * scale);
+
+        sections.push(
+          new Paragraph({
+            children: [
+              new ImageRun({
+                data: uint8,
+                transformation: { width: renderWidth, height: renderHeight },
+                type: blob.type.includes("png") ? "png" : "jpg",
+              }),
+            ],
+            alignment: AlignmentType.CENTER,
+            spacing: { before: 200 },
+          }),
+          // Page break after cover
+          new Paragraph({ children: [new PageBreak()] }),
+        );
+      }
+    } catch {
+      // Cover fetch failed, skip it
+    }
+  }
+
+  // ── Page 2: Title page ──
   sections.push(
     new Paragraph({
       children: [new TextRun("")],
@@ -183,10 +298,11 @@ export const downloadBookAsDocx = async (book: Book): Promise<void> => {
       ],
       alignment: AlignmentType.CENTER,
     }),
+    // Use account display name
     new Paragraph({
       children: [
         new TextRun({
-          text: book.author,
+          text: options.displayName,
           size: 28,
           font: "Georgia",
         }),
@@ -221,17 +337,20 @@ export const downloadBookAsDocx = async (book: Book): Promise<void> => {
     const paragraphs = plainText.split("\n");
 
     // Page break before each chapter
-    sections.push(
-      new Paragraph({
-        children: [new PageBreak()],
-      }),
-    );
+    sections.push(new Paragraph({ children: [new PageBreak()] }));
 
-    // Chapter title
+    // Chapter title — black text, NOT the blue Heading style
     sections.push(
       new Paragraph({
-        text: chapterTitle,
-        heading: HeadingLevel.HEADING_1,
+        children: [
+          new TextRun({
+            text: chapterTitle,
+            bold: true,
+            size: 32,
+            font: "Georgia",
+            color: "000000",
+          }),
+        ],
         spacing: { after: 400 },
       }),
     );
@@ -253,15 +372,11 @@ export const downloadBookAsDocx = async (book: Book): Promise<void> => {
     }
   }
 
-  const doc = new Document({
-    sections: [
-      {
-        children: sections,
-      },
-    ],
+  const docFile = new Document({
+    sections: [{ children: sections }],
   });
 
-  const blob = await Packer.toBlob(doc);
+  const blobResult = await Packer.toBlob(docFile);
   const filename = `${sanitizeFilename(book.title)}.docx`;
-  saveAs(blob, filename);
+  saveAs(blobResult, filename);
 };
