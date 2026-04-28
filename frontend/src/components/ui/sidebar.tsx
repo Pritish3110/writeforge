@@ -182,7 +182,7 @@ const Sidebar = React.forwardRef<
       {/* This is what handles the sidebar gap on desktop */}
       <div
         className={cn(
-          "relative h-svh w-[--sidebar-width] bg-transparent transition-[width] duration-200 ease-linear",
+          "relative h-svh w-[--sidebar-width] bg-transparent transition-[width] duration-300 ease-in-out",
           "group-data-[collapsible=offcanvas]:w-0",
           "group-data-[side=right]:rotate-180",
           variant === "floating" || variant === "inset"
@@ -192,7 +192,7 @@ const Sidebar = React.forwardRef<
       />
       <div
         className={cn(
-          "fixed inset-y-0 z-10 hidden h-svh w-[--sidebar-width] transition-[left,right,width] duration-200 ease-linear md:flex",
+          "fixed inset-y-0 z-10 hidden h-svh w-[--sidebar-width] transition-[left,right,width] duration-300 ease-in-out md:flex",
           side === "left"
             ? "left-0 group-data-[collapsible=offcanvas]:left-[calc(var(--sidebar-width)*-1)]"
             : "right-0 group-data-[collapsible=offcanvas]:right-[calc(var(--sidebar-width)*-1)]",
@@ -443,6 +443,40 @@ const SidebarMenuButton = React.forwardRef<
 >(({ asChild = false, isActive = false, variant = "default", size = "default", tooltip, className, ...props }, ref) => {
   const Comp = asChild ? Slot : "button";
   const { isMobile, state } = useSidebar();
+  const [tooltipOpen, setTooltipOpen] = React.useState(false);
+  const canShowTooltip = state === "collapsed" && !isMobile;
+
+  React.useEffect(() => {
+    if (!tooltipOpen) {
+      return;
+    }
+
+    const timeoutId = window.setTimeout(() => {
+      setTooltipOpen(false);
+    }, 1800);
+
+    return () => {
+      window.clearTimeout(timeoutId);
+    };
+  }, [tooltipOpen]);
+
+  React.useEffect(() => {
+    if (!canShowTooltip && tooltipOpen) {
+      setTooltipOpen(false);
+    }
+  }, [canShowTooltip, tooltipOpen]);
+
+  React.useEffect(() => {
+    const closeTooltip = () => setTooltipOpen(false);
+
+    window.addEventListener("blur", closeTooltip);
+    document.addEventListener("visibilitychange", closeTooltip);
+
+    return () => {
+      window.removeEventListener("blur", closeTooltip);
+      document.removeEventListener("visibilitychange", closeTooltip);
+    };
+  }, []);
 
   const button = (
     <Comp
@@ -466,7 +500,10 @@ const SidebarMenuButton = React.forwardRef<
   }
 
   return (
-    <Tooltip>
+    <Tooltip
+      open={canShowTooltip ? tooltipOpen : false}
+      onOpenChange={(open) => setTooltipOpen(canShowTooltip && open)}
+    >
       <TooltipTrigger asChild>{button}</TooltipTrigger>
       <TooltipContent side="right" align="center" hidden={state !== "collapsed" || isMobile} {...tooltip} />
     </Tooltip>

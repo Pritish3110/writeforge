@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { lazy, Suspense, useCallback, useEffect, useMemo, useState } from "react";
 import { format } from "date-fns";
 import {
   fetchLearningSessionToday,
@@ -40,15 +40,6 @@ import { Progress } from "@/components/ui/progress";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Textarea } from "@/components/ui/textarea";
 import {
-  CartesianGrid,
-  Line,
-  LineChart,
-  ResponsiveContainer,
-  Tooltip,
-  XAxis,
-  YAxis,
-} from "recharts";
-import {
   ArrowRight,
   BrainCircuit,
   CalendarDays,
@@ -61,6 +52,8 @@ import {
   TrendingUp,
   WandSparkles,
 } from "lucide-react";
+
+const SkillBuilderTrendChart = lazy(() => import("@/components/skillBuilder/SkillBuilderTrendChart"));
 
 const getTopicFromItem = (item: LearningQueueItem | null): LearningTopic | null => {
   if (!item) return null;
@@ -124,14 +117,6 @@ const evaluationDimensionCopy = {
   clarity: "Sentence Flow",
 } as const;
 
-const tooltipStyle = {
-  background: "hsl(var(--card))",
-  border: "1px solid hsl(var(--border))",
-  borderRadius: "0.75rem",
-  fontFamily: "JetBrains Mono",
-  fontSize: "12px",
-};
-
 const formatCountdown = (milliseconds: number) => {
   const totalSeconds = Math.max(0, Math.floor(milliseconds / 1000));
   const hours = String(Math.floor(totalSeconds / 3600)).padStart(2, "0");
@@ -165,6 +150,29 @@ const StepPill = ({
   >
     {label}
   </button>
+);
+
+const SkillBuilderPageSkeleton = () => (
+  <div className="mx-auto max-w-6xl space-y-6">
+    <div className="space-y-3">
+      <Skeleton className="h-9 w-56" />
+      <Skeleton className="h-5 w-full max-w-2xl" />
+    </div>
+    <div className="grid gap-4 lg:grid-cols-2">
+      <Card className="glow-card glow-border" hoverable={false}>
+        <CardContent className="space-y-4 p-6">
+          <Skeleton className="h-8 w-40" />
+          <Skeleton className="h-48 w-full" />
+        </CardContent>
+      </Card>
+      <Card className="glow-card glow-border" hoverable={false}>
+        <CardContent className="space-y-4 p-6">
+          <Skeleton className="h-8 w-32" />
+          <Skeleton className="h-48 w-full" />
+        </CardContent>
+      </Card>
+    </div>
+  </div>
 );
 
 const SkillBuilder = () => {
@@ -226,7 +234,7 @@ const SkillBuilder = () => {
     examples: topic?.examples || [],
   };
   const validation = validateSkillBuilderDraft(content);
-  const learningPath = progress?.learningPath || [];
+  const learningPath = useMemo(() => progress?.learningPath || [], [progress?.learningPath]);
   const tracker = progress?.skillBuilderInsights?.heatmap || progress?.heatmap || [];
   const masteryItem = learningPath.find((item) => item.topicId === topic?.id) || null;
   const attempts = (progress?.skillBuilderInsights?.recentAttempts || []).filter(
@@ -294,13 +302,6 @@ const SkillBuilder = () => {
 
   const loadSession = useCallback(
     async (showLoader = false) => {
-      if (!topicId) {
-        setSession(null);
-        setSessionCycle(null);
-        setLoadingSession(false);
-        return null;
-      }
-
       if (showLoader) {
         setLoadingSession(true);
       }
@@ -322,17 +323,10 @@ const SkillBuilder = () => {
         }
       }
     },
-    [topicId],
+    [],
   );
 
   useEffect(() => {
-    if (!topicId) {
-      setSession(null);
-      setSessionCycle(null);
-      setLoadingSession(false);
-      return;
-    }
-
     let cancelled = false;
 
     const restoreSession = async () => {
@@ -348,7 +342,7 @@ const SkillBuilder = () => {
     return () => {
       cancelled = true;
     };
-  }, [loadSession, topicId]);
+  }, [loadSession]);
 
   useEffect(() => {
     resetLocalSessionState();
@@ -600,29 +594,8 @@ const SkillBuilder = () => {
     }
   };
 
-  if (loadingToday || loadingSession) {
-    return (
-      <div className="mx-auto max-w-6xl space-y-6">
-        <div className="space-y-3">
-          <Skeleton className="h-9 w-56" />
-          <Skeleton className="h-5 w-full max-w-2xl" />
-        </div>
-        <div className="grid gap-4 lg:grid-cols-2">
-          <Card className="glow-card glow-border" hoverable={false}>
-            <CardContent className="space-y-4 p-6">
-              <Skeleton className="h-8 w-40" />
-              <Skeleton className="h-48 w-full" />
-            </CardContent>
-          </Card>
-          <Card className="glow-card glow-border" hoverable={false}>
-            <CardContent className="space-y-4 p-6">
-              <Skeleton className="h-8 w-32" />
-              <Skeleton className="h-48 w-full" />
-            </CardContent>
-          </Card>
-        </div>
-      </div>
-    );
+  if (loadingToday) {
+    return <SkillBuilderPageSkeleton />;
   }
 
   if (error || !topic || !progress) {
@@ -698,7 +671,11 @@ const SkillBuilder = () => {
           </div>
         </div>
 
-        {sessionError ? <p className="text-sm text-muted-foreground">{sessionError}</p> : null}
+        {loadingSession ? (
+          <p className="text-sm text-muted-foreground">Restoring today&apos;s session progress...</p>
+        ) : sessionError ? (
+          <p className="text-sm text-muted-foreground">{sessionError}</p>
+        ) : null}
       </div>
 
       <div className="grid gap-4 xl:grid-cols-[1.1fr_0.9fr]">
@@ -1143,21 +1120,9 @@ const SkillBuilder = () => {
 
             {attemptTrendData.length > 1 ? (
               <div className="h-44">
-                <ResponsiveContainer width="100%" height="100%">
-                  <LineChart data={attemptTrendData}>
-                    <CartesianGrid stroke="hsl(var(--border) / 0.35)" vertical={false} />
-                    <XAxis dataKey="label" stroke="hsl(var(--muted-foreground))" fontSize={12} tickLine={false} axisLine={false} />
-                    <YAxis stroke="hsl(var(--muted-foreground))" fontSize={12} tickLine={false} axisLine={false} domain={[0, 100]} />
-                    <Tooltip contentStyle={tooltipStyle} />
-                    <Line
-                      type="monotone"
-                      dataKey="score"
-                      stroke="hsl(var(--neon-cyan))"
-                      strokeWidth={2.5}
-                      dot={{ fill: "hsl(var(--neon-cyan))", r: 3 }}
-                    />
-                  </LineChart>
-                </ResponsiveContainer>
+                <Suspense fallback={<Skeleton className="h-full w-full rounded-[12px]" />}>
+                  <SkillBuilderTrendChart data={attemptTrendData} />
+                </Suspense>
               </div>
             ) : null}
 

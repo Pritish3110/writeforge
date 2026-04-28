@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { lazy, Suspense, useState } from "react";
 import { AnimatePresence } from "framer-motion";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import {
@@ -21,7 +21,6 @@ import { DeleteConfirmationProvider } from "@/components/DeleteConfirmationProvi
 import LoadingScreen from "@/components/LoadingScreen";
 import AuthPage, { AuthLoadingState } from "./pages/AuthPage";
 import Dashboard from "./pages/Dashboard";
-import SkillBuilder from "./pages/SkillBuilder";
 import DailyTasks from "./pages/DailyTasks";
 import WeeklySchedule from "./pages/WeeklySchedule";
 import Analytics from "./pages/Analytics";
@@ -43,6 +42,26 @@ import NotFound from "./pages/NotFound";
 import CustomTaskBuilder from "./pages/CustomTaskBuilder";
 
 const queryClient = new QueryClient();
+const SkillBuilder = lazy(() => import("./pages/SkillBuilder"));
+
+const SkillBuilderRouteFallback = () => (
+  <div className="mx-auto max-w-6xl space-y-6">
+    <div className="space-y-3">
+      <div className="h-9 w-56 animate-pulse rounded-md bg-muted" />
+      <div className="h-5 w-full max-w-2xl animate-pulse rounded-md bg-muted" />
+    </div>
+    <div className="grid gap-4 lg:grid-cols-2">
+      <div className="space-y-4 rounded-lg border border-border bg-card p-6">
+        <div className="h-8 w-40 animate-pulse rounded-md bg-muted" />
+        <div className="h-48 w-full animate-pulse rounded-md bg-muted" />
+      </div>
+      <div className="space-y-4 rounded-lg border border-border bg-card p-6">
+        <div className="h-8 w-32 animate-pulse rounded-md bg-muted" />
+        <div className="h-48 w-full animate-pulse rounded-md bg-muted" />
+      </div>
+    </div>
+  </div>
+);
 
 const AuthOnlyRoute = () => {
   const { loading, user } = useAuth();
@@ -103,7 +122,14 @@ const App = () => {
                   <Route path="/auth" element={<AuthOnlyRoute />} />
                   <Route element={<ProtectedAppShell />}>
                     <Route path="/" element={<Dashboard />} />
-                    <Route path="/skill-builder" element={<SkillBuilder />} />
+                    <Route
+                      path="/skill-builder"
+                      element={
+                        <Suspense fallback={<SkillBuilderRouteFallback />}>
+                          <SkillBuilder />
+                        </Suspense>
+                      }
+                    />
                     <Route path="/daily-tasks" element={<DailyTasks />} />
                     <Route path="/weekly-schedule" element={<WeeklySchedule />} />
                     <Route path="/analytics" element={<Analytics />} />
