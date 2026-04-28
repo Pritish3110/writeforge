@@ -2,15 +2,13 @@ import type { FocusEvent, SVGProps } from "react";
 import { useEffect, useMemo, useRef, useState } from "react";
 import {
   LayoutDashboard, CalendarCheck, CalendarDays, BarChart3,
-  FlaskConical, Settings, Moon, Sun, BookOpen, Wrench,
-  BrainCircuit, GitFork, Map, Sparkles, LogOut, PenSquare,
+  FlaskConical, BookOpen, Wrench,
+  BrainCircuit, GitFork, Map, Sparkles, PenSquare,
   PanelLeft, Plus,
 } from "lucide-react";
 import { BrandMark } from "@/components/brand/BrandMark";
 import { NavLink } from "@/components/NavLink";
-import { useTheme } from "@/contexts/ThemeContext";
-import { useAuth } from "@/contexts/AuthContext";
-import { toast } from "@/components/ui/sonner";
+
 import { cn } from "@/lib/utils";
 import {
   Sidebar,
@@ -84,7 +82,8 @@ const navSections = [
   {
     label: "Analytics",
     items: [
-      { title: "Analytics", url: "/writing-analytics", icon: BarChart3 },
+      { title: "Analytics", url: "/analytics", icon: BarChart3 },
+      { title: "Writing Analytics", url: "/writing-analytics", icon: BarChart3 },
     ],
   },
 ];
@@ -93,7 +92,7 @@ const createItems = [
   { title: "Characters", url: "/character-lab", icon: FlaskConical },
   { title: "Relationships", url: "/character-relationships", icon: GitFork },
   { title: "Plot Builder", url: "/plot-builder", icon: Map },
-  { title: "World Element Designer", url: "/world-elements", icon: Sparkles },
+  { title: "World Elements", url: "/world-elements", icon: Sparkles },
 ];
 
 type SidebarControlMode = "expanded" | "collapsed" | "hover";
@@ -104,10 +103,10 @@ const sidebarControlOptions: Array<{
   label: string;
   value: SidebarControlMode;
 }> = [
-  { label: "Expanded", value: "expanded" },
-  { label: "Collapsed", value: "collapsed" },
-  { label: "Expand on hover", value: "hover" },
-];
+    { label: "Expanded", value: "expanded" },
+    { label: "Collapsed", value: "collapsed" },
+    { label: "Expand on hover", value: "hover" },
+  ];
 
 const readStoredSidebarMode = (): SidebarControlMode => {
   if (typeof window === "undefined") {
@@ -236,17 +235,6 @@ function SidebarHeader({
 
   return (
     <SidebarHeaderPrimitive className={cn("gap-4 p-3 pb-2 overflow-visible", collapsed && "items-center px-2")}>
-      <div className={cn("flex h-10 items-center", collapsed && "justify-center")}>
-        {collapsed ? (
-          <BrandMark
-            showWordmark={false}
-            className="justify-center"
-            markClassName="h-8 w-8 rounded-md"
-          />
-        ) : (
-          <BrandMark />
-        )}
-      </div>
       <CreateMenu
         collapsed={collapsed}
         open={isCreateMenuOpen}
@@ -322,7 +310,8 @@ function CreateMenu({
 
       {open ? (
         <div
-          className="absolute left-full top-0 z-50 pl-2"
+          className="absolute left-full z-50 pl-4"
+          style={{ top: '0', transform: 'translateY(-5%)' }}
           onPointerEnter={openMenu}
           onPointerLeave={() => closeMenu()}
         >
@@ -364,79 +353,14 @@ function SidebarFooter({
 }) {
   const { state } = useSidebar();
   const collapsed = state === "collapsed";
-  const { theme, toggleTheme } = useTheme();
-  const { signOut, user } = useAuth();
-  const [isSigningOut, setIsSigningOut] = useState(false);
   const selectedModeLabel = useMemo(
     () => sidebarControlOptions.find((option) => option.value === controlMode)?.label || "Expand on hover",
     [controlMode],
   );
 
-  const handleSignOut = async () => {
-    setIsSigningOut(true);
-
-    try {
-      await signOut();
-      toast.success("Signed out", {
-        description: "Your WriterZ session ended safely.",
-      });
-    } catch (error) {
-      toast.error("Unable to sign out", {
-        description:
-          error instanceof Error ? error.message : "Please try again in a moment.",
-      });
-    } finally {
-      setIsSigningOut(false);
-    }
-  };
-
   return (
     <SidebarFooterPrimitive className={cn("gap-2 p-3", collapsed && "items-center px-2")}>
       <SidebarMenu className={cn(collapsed && "items-center")}>
-        {user ? (
-          <SidebarMenuItem>
-            <SidebarMenuButton
-              onClick={() => void handleSignOut()}
-              disabled={isSigningOut}
-              tooltip={isSigningOut ? "Signing Out..." : "Sign Out"}
-              className={cn(
-                "text-muted-foreground hover:bg-muted/55 hover:text-foreground",
-                collapsed && "justify-center",
-              )}
-            >
-              <LogOut className="h-4 w-4 shrink-0" />
-              {!collapsed && <span>{isSigningOut ? "Signing Out..." : "Sign Out"}</span>}
-            </SidebarMenuButton>
-          </SidebarMenuItem>
-        ) : null}
-
-        <SidebarMenuItem>
-          <SidebarMenuButton asChild tooltip="Profile">
-            <NavLink
-              to="/settings"
-              className="text-muted-foreground transition-colors duration-150 hover:bg-muted/55 hover:text-foreground"
-              activeClassName="bg-secondary text-foreground font-medium"
-            >
-              <Settings className="h-4 w-4 shrink-0" />
-              {!collapsed && <span>Profile</span>}
-            </NavLink>
-          </SidebarMenuButton>
-        </SidebarMenuItem>
-
-        <SidebarMenuItem>
-          <SidebarMenuButton
-            onClick={toggleTheme}
-            tooltip={theme === "dark" ? "Light Mode" : "Dark Mode"}
-            className={cn(
-              "text-muted-foreground hover:bg-muted/55 hover:text-foreground",
-              collapsed && "justify-center",
-            )}
-          >
-            {theme === "dark" ? <Sun className="h-4 w-4 shrink-0" /> : <Moon className="h-4 w-4 shrink-0" />}
-            {!collapsed && <span>{theme === "dark" ? "Light Mode" : "Dark Mode"}</span>}
-          </SidebarMenuButton>
-        </SidebarMenuItem>
-
         <SidebarMenuItem>
           <DropdownMenu open={isControlMenuOpen} onOpenChange={onControlMenuOpenChange}>
             <DropdownMenuTrigger asChild>
