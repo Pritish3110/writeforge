@@ -1,5 +1,5 @@
 import type { FocusEvent, SVGProps } from "react";
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   LayoutDashboard, CalendarCheck, CalendarDays, BarChart3,
   FlaskConical, BookOpen, Wrench,
@@ -89,7 +89,7 @@ const navSections = [
 ];
 
 const createItems = [
-  { title: "Characters", url: "/character-lab", icon: FlaskConical },
+  { title: "Characters", url: "/character-lab/new", icon: FlaskConical },
   { title: "Relationships", url: "/character-relationships", icon: GitFork },
   { title: "Plot Builder", url: "/plot-builder", icon: Map },
   { title: "World Elements", url: "/world-elements", icon: Sparkles },
@@ -126,6 +126,12 @@ export function AppSidebar() {
   const [isCreateMenuOpen, setIsCreateMenuOpen] = useState(false);
   const isPointerInsideSidebarRef = useRef(false);
   const isHoverMode = controlMode === "hover";
+  const collapseHoverSidebar = useCallback(() => {
+    isPointerInsideSidebarRef.current = false;
+    setIsControlMenuOpen(false);
+    setIsCreateMenuOpen(false);
+    setOpen(false);
+  }, [setOpen]);
 
   useEffect(() => {
     window.localStorage.setItem(SIDEBAR_MODE_STORAGE_KEY, controlMode);
@@ -143,13 +149,6 @@ export function AppSidebar() {
       return;
     }
 
-    const collapseHoverSidebar = () => {
-      isPointerInsideSidebarRef.current = false;
-      setIsControlMenuOpen(false);
-      setIsCreateMenuOpen(false);
-      setOpen(false);
-    };
-
     const handleVisibilityChange = () => {
       if (document.hidden) {
         collapseHoverSidebar();
@@ -163,7 +162,7 @@ export function AppSidebar() {
       window.removeEventListener("blur", collapseHoverSidebar);
       document.removeEventListener("visibilitychange", handleVisibilityChange);
     };
-  }, [isHoverMode, setOpen]);
+  }, [collapseHoverSidebar, isHoverMode]);
 
   const handleControlModeChange = (nextMode: string) => {
     if (nextMode === "expanded" || nextMode === "collapsed" || nextMode === "hover") {
@@ -199,6 +198,15 @@ export function AppSidebar() {
     }
   };
 
+  const handleCreateItemSelect = () => {
+    if (isHoverMode) {
+      collapseHoverSidebar();
+      return;
+    }
+
+    setIsCreateMenuOpen(false);
+  };
+
   return (
     <Sidebar
       collapsible="icon"
@@ -209,6 +217,7 @@ export function AppSidebar() {
       <SidebarContent className="flex h-full flex-col overflow-visible bg-sidebar group-data-[collapsible=icon]:overflow-visible">
         <SidebarHeader
           isCreateMenuOpen={isCreateMenuOpen}
+          onCreateItemSelect={handleCreateItemSelect}
           onCreateMenuOpenChange={handleCreateMenuOpenChange}
         />
         <SidebarNav />
@@ -225,9 +234,11 @@ export function AppSidebar() {
 
 function SidebarHeader({
   isCreateMenuOpen,
+  onCreateItemSelect,
   onCreateMenuOpenChange,
 }: {
   isCreateMenuOpen: boolean;
+  onCreateItemSelect: () => void;
   onCreateMenuOpenChange: (open: boolean) => void;
 }) {
   const { state } = useSidebar();
@@ -238,6 +249,7 @@ function SidebarHeader({
       <CreateMenu
         collapsed={collapsed}
         open={isCreateMenuOpen}
+        onItemSelect={onCreateItemSelect}
         onOpenChange={onCreateMenuOpenChange}
       />
     </SidebarHeaderPrimitive>
@@ -247,10 +259,12 @@ function SidebarHeader({
 function CreateMenu({
   collapsed,
   open,
+  onItemSelect,
   onOpenChange,
 }: {
   collapsed: boolean;
   open: boolean;
+  onItemSelect: () => void;
   onOpenChange: (open: boolean) => void;
 }) {
   const closeTimerRef = useRef<number | null>(null);
@@ -327,7 +341,7 @@ function CreateMenu({
                 className="flex items-center gap-3 rounded-md px-3 py-2.5 text-sm text-muted-foreground transition-colors duration-150 hover:bg-muted/55 hover:text-foreground focus-visible:bg-muted/55 focus-visible:text-foreground focus-visible:outline-none"
                 activeClassName="bg-secondary text-foreground font-medium"
                 role="menuitem"
-                onClick={() => onOpenChange(false)}
+                onClick={onItemSelect}
               >
                 <item.icon className="h-4 w-4 shrink-0" />
                 <span>{item.title}</span>
